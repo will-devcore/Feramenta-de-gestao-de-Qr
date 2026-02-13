@@ -1,0 +1,49 @@
+/* Configuração geral da página */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+}
+
+/* Ajusta o tamanho do visor da câmera */
+#reader {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    border: 2px solid #333;
+    border-radius: 8px;
+    background: white;
+}
+
+/* Estiliza os botões */
+button {
+    padding: 10px 15px;
+    margin: 5px;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+.btn-exportar {
+    background-color: #28a745; /* Verde para destacar a exportação */
+    color: white;
+    font-weight: bold;
+}
+
+/* Deixa a tabela bonita e legível */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    margin-top: 20px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 12px;
+    text-align: left;
+    font-size: 14px;
+}
+
+th { background-color: #eee; }
