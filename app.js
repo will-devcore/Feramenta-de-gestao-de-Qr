@@ -1,76 +1,79 @@
-// --- VARIÁVEIS GLOBAIS ---
-// Criamos uma lista (Array) vazia para guardar os escaneamentos temporariamente
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
+authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
+projectId: "sistema-qr-master",
+storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
+messagingSenderId: "587607393218",
+appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 let listaEscaneamentos = [];
 
-// --- CONFIGURAÇÃO DO SCANNER ---
-// Criamos uma nova instância do scanner e apontamos para o ID 'reader' do HTML
-const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-    fps: 10, // Velocidade: 10 quadros por segundo
-    qrbox: { width: 250, height: 250 } // Área útil de leitura (o quadradinho)
+async function enviarParaNuvem(link, data, operador, grupo) {
+try {
+await addDoc(collection(db, "scans"), {
+link: link,
+data: data,
+operador: operador,
+grupo: grupo
+});
+console.log("Salvo no Firebase!");
+} catch (e) {
+console.error("Erro ao salvar: ", e);
+}
+}
+
+const html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+fps: 10,
+qrbox: { width: 250, height: 250 }
 });
 
-// --- FUNÇÃO DE SUCESSO ---
-// Esta função roda toda vez que a câmera lê um QR Code
 function aoLerSucesso(textoDecodificado) {
-    // Pegamos a data e hora do momento exato da leitura
-    const agora = new Date();
-    const dataFormatada = agora.toLocaleString('pt-BR');
+const agora = new Date();
+const dataFormatada = agora.toLocaleString('pt-BR');
+const item = {
+link: textoDecodificado,
+data: dataFormatada,
+operador: "Admin Inicial",
+grupo: "Grupo 01"
+};
 
-    // Criamos um objeto 'item' com as informações que você quer correlacionar
-    const itemEscaneado = {
-        link: textoDecodificado, // O link que estava no QR Code
-        data: dataFormatada,     // A data/hora escrita
-        operador: "Admin Teste", // Nome fixo por enquanto (até termos o login)
-        grupo: "Grupo 01"        // Grupo fixo por enquanto
-    };
-
-    // Adicionamos esse item no topo da nossa lista
-    listaEscaneamentos.unshift(itemEscaneado);
-
-    // Chamamos a função para mostrar esses dados na tabela do site
-    atualizarTabelaNaTela();
-    
-    // Alerta visual para o operador saber que funcionou
-    console.log("Link capturado: " + textoDecodificado);
+listaEscaneamentos.unshift(item);
+atualizarTabelaNaTela();
+enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
 }
 
-// Ativa o scanner de fato
 html5QrcodeScanner.render(aoLerSucesso);
 
-// --- FUNÇÃO PARA MOSTRAR OS DADOS NA TABELA ---
 function atualizarTabelaNaTela() {
-    const corpoTabela = document.getElementById("corpoTabela");
-    corpoTabela.innerHTML = ""; // Limpa a tabela antes de colocar os novos dados
+const corpoTabela = document.getElementById("corpoTabela");
+if (!corpoTabela) return;
 
-    // Para cada item na nossa lista, criamos uma linha (tr) na tabela
-    listaEscaneamentos.forEach(item => {
-        const linha = `
-            <tr>
-                <td>${item.link}</td>
-                <td>${item.data}</td>
-                <td>${item.operador}</td>
-            </tr>
-        `;
-        corpoTabela.innerHTML += linha;
-    });
+corpoTabela.innerHTML = "";
+listaEscaneamentos.forEach(item => {
+    corpoTabela.innerHTML += `<tr><td>${item.link}</td><td>${item.data}</td><td>${item.operador}</td></tr>`;
+});
 }
 
-// --- FUNÇÃO DE EXPORTAÇÃO PARA EXCEL (CSV) ---
-function exportarParaCSV() {
-    // Definimos o cabeçalho do arquivo. O Excel entende o ';' como separador de colunas.
-    let conteudoCSV = "Link;Data_Hora;Operador;Grupo\n";
-
-    // Percorremos a lista e adicionamos cada escaneamento ao texto do arquivo
-    listaEscaneamentos.forEach(item => {
-        conteudoCSV += `${item.link};${item.data};${item.operador};${item.grupo}\n`;
-    });
-
-    // Criamos um 'Blob' (um arquivo binário de texto)
-    const blob = new Blob([conteudoCSV], { type: 'text/csv;charset=utf-8;' });
-    
-    // Criamos um link de download invisível e clicamos nele via código
-    const linkBaixar = document.createElement("a");
-    linkBaixar.href = URL.createObjectURL(blob);
-    linkBaixar.download = "Relatorio_QR_Master.csv"; // Nome do arquivo que será baixado
-    linkBaixar.click();
+window.exportarParaCSV = function() {
+if (listaEscaneamentos.length === 0) {
+alert("Não há dados para exportar ainda!");
+return;
 }
+
+let conteudoCSV = "Link;Data_Hora;Operador;Grupo\n";
+listaEscaneamentos.forEach(item => {
+    conteudoCSV += `${item.link};${item.data};${item.operador};${item.grupo}\n`;
+});
+
+const blob = new Blob(["\ufeff" + conteudoCSV], { type: 'text/csv;charset=utf-8;' });
+const linkBaixar = document.createElement("a");
+linkBaixar.href = URL.createObjectURL(blob);
+linkBaixar.download = "Relatorio_QR.csv";
+linkBaixar.click();
+};
