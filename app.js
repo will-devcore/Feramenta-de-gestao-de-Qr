@@ -49,13 +49,15 @@ qrbox: { width: 250, height: 250 }
 });
 
 function aoLerSucesso(textoDecodificado) {
-    if (textoDecodificado === ultimoCodigoLido) {
-        alert("ERRO: Este QR Code já foi registrado agora mesmo!");
-        return; 
+    // VERIFICAÇÃO DE OURO: Procura se esse link já existe na lista atual
+    const jaExiste = listaEscaneamentos.some(item => item.link === textoDecodificado);
+
+    if (jaExiste) {
+        alert("⚠️ ERRO: Este link já foi escaneado e já está na lista!");
+        return; // Para tudo aqui e não salva nada
     }
 
-    ultimoCodigoLido = textoDecodificado;
-    
+    // Se passou pela trava, segue o processo normal
     const agora = new Date();
     const dataFormatada = agora.toLocaleString('pt-BR');
     const item = {
@@ -69,7 +71,7 @@ function aoLerSucesso(textoDecodificado) {
     atualizarTabelaNaTela();
     enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
 
-    alert("Sucesso! Código guardado.");
+    alert("✅ QR Code registrado com sucesso!");
 }
 
 html5QrcodeScanner.render(aoLerSucesso, { qrbox: 250, preferredCamera: "back" });
@@ -80,13 +82,16 @@ function atualizarTabelaNaTela() {
 
     corpoTabela.innerHTML = "";
     listaEscaneamentos.forEach((item, index) => {
+        // Corta o link para mostrar apenas os primeiros 15 caracteres + ...
+        const linkCurto = item.link.length > 15 ? item.link.substring(0, 15) + "..." : item.link;
+
         corpoTabela.innerHTML += `
             <tr>
-                <td><small>${item.link.substring(0, 15)}...</small></td>
-                <td>${item.data}</td>
-                <td>${item.operador} (${item.grupo})</td>
+                <td title="${item.link}" style="font-size: 11px; color: #007bff;">${linkCurto}</td>
+                <td style="font-size: 11px;">${item.data}</td>
+                <td style="font-size: 11px;">${item.operador}</td>
                 <td style="text-align:center;">
-                    <button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:5px 10px; border-radius:5px; font-weight:bold;">X</button>
+                    <button onclick="removerItem(${index})" style="background:#ff4d4d; color:white; border:none; padding:4px 8px; border-radius:4px; font-size: 10px; font-weight:bold;">X</button>
                 </td>
             </tr>`;
     });
@@ -100,19 +105,23 @@ atualizarTabelaNaTela();
 };
 
 window.exportarParaCSV = function() {
-if (listaEscaneamentos.length === 0) {
-alert("Não há dados para exportar ainda!");
-return;
-}
+    if (listaEscaneamentos.length === 0) {
+        alert("Não há dados para exportar ainda!");
+        return;
+    }
 
-let conteudoCSV = "Link;Data_Hora;Operador;Grupo\n";
-listaEscaneamentos.forEach(item => {
-    conteudoCSV += `${item.link};${item.data};${item.operador};${item.grupo}\n`;
-});
+    // Cabeçalho do arquivo Excel
+    let conteudoCSV = "Link Completo;Data e Hora;Operador;Grupo\n";
 
-const blob = new Blob(["\ufeff" + conteudoCSV], { type: 'text/csv;charset=utf-8;' });
-const linkBaixar = document.createElement("a");
-linkBaixar.href = URL.createObjectURL(blob);
-linkBaixar.download = "Relatorio_QR.csv";
-linkBaixar.click();
+    listaEscaneamentos.forEach(item => {
+        // Aqui usamos item.link (o link original sem cortes)
+        conteudoCSV += `${item.link};${item.data};${item.operador};${item.grupo}\n`;
+    });
+
+    // Cria o arquivo com codificação que o Excel entende (UTF-8 com BOM)
+    const blob = new Blob(["\ufeff" + conteudoCSV], { type: 'text/csv;charset=utf-8;' });
+    const linkBaixar = document.createElement("a");
+    linkBaixar.href = URL.createObjectURL(blob);
+    linkBaixar.download = `Relatorio_QR_${operadorAtual}.csv`;
+    linkBaixar.click();
 };
