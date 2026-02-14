@@ -1,127 +1,178 @@
+// 1. TODOS OS IMPORTS NO TOPO
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+// 2. CONFIGURAÇÃO
 const firebaseConfig = {
-apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
-authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
-projectId: "sistema-qr-master",
-storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
-messagingSenderId: "587607393218",
-appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+    apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
+    authDomain: "sistema-qr-master.firebaseapp.com",
+    projectId: "sistema-qr-master",
+    storageBucket: "sistema-qr-master.appspot.com",
+    messagingSenderId: "587607393218",
+    appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+
 let listaEscaneamentos = [];
-let ultimoCodigoLido = "";
+let operadorAtual = "";
+let grupoAtual = "";
+let scannerIniciado = false;
 
-// Pergunta o nome e o grupo se não estiverem salvos no celular
-let operadorAtual = localStorage.getItem("operador") || prompt("Digite seu nome de Operador:") || "Visitante";
-let grupoAtual = localStorage.getItem("grupo") || prompt("Digite seu Grupo (ex: Grupo 01):") || "Geral";
+// --- FUNÇÕES DE ACESSO ---
+window.fazerLogin = function() {
+    const email = document.getElementById("emailLogin").value;
+    const senha = document.getElementById("senhaLogin").value;
+    signInWithEmailAndPassword(auth, email, senha).catch(err => alert("Erro: E-mail ou senha inválidos."));
+};
 
-// Salva para não ter que digitar toda vez
-localStorage.setItem("operador", operadorAtual);
-localStorage.setItem("grupo", grupoAtual);
+window.fazerLogout = function() {
+    signOut(auth).then(() => location.reload());
+};
 
-// ATUALIZA A TELA: Substitui o "Carregando..." pelo nome real
-const pInfo = document.getElementById("infoUsuario");
-if (pInfo) {
-    pInfo.innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
-}
+onAuthStateChanged(auth, async (user) => {
+    const telaLogin = document.getElementById("telaLogin");
+    const conteudoApp = document.getElementById("conteudoApp");
+    const btnSair = document.getElementById("btnSair");
 
-async function enviarParaNuvem(link, data, operador, grupo) {
-try {
-await addDoc(collection(db, "scans"), {
-link: link,
-data: data,
-operador: operador,
-grupo: grupo
+    if (user) {
+        // Busca os dados do seu documento que criamos no Firestore
+        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+        
+        if (userDoc.exists() && userDoc.data().aprovado) {
+            const dados = userDoc.data();
+            operadorAtual = dados.nome;
+            grupoAtual = dados.grupo;
+            
+            // LIBERA O PAINEL SE FOR ADMIN
+            if (dados.cargo === "admin") {
+                document.getElementById("painelAdmin").style.display = "block";
+            }
+
+            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
+            telaLogin.style.display = "none";
+            conteudoApp.style.display = "block";
+            btnSair.style.display = "block";
+            
+            if (!scannerIniciado) { iniciarScanner(); }
+        } else {
+            alert("Acesso pendente de aprovação.");
+            signOut(auth);
+        }
+    } else {
+        telaLogin.style.display = "block";
+        conteudoApp.style.display = "none";
+        btnSair.style.display = "none";
+    }
 });
-console.log("Salvo no Firebase!");
-} catch (e) {
-console.error("Erro ao salvar: ", e);
-}
-}
 
-const html5QrcodeScanner = new Html5QrcodeScanner("reader", {
-fps: 10,
-qrbox: { width: 250, height: 250 }
-});
+// --- SCANNER E TABELA ---
+function iniciarScanner() {
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    html5QrcodeScanner.render(aoLerSucesso);
+    scannerIniciado = true;
+}
 
 function aoLerSucesso(textoDecodificado) {
-    // VERIFICAÇÃO DE OURO: Procura se esse link já existe na lista atual
-    const jaExiste = listaEscaneamentos.some(item => item.link === textoDecodificado);
-
-    if (jaExiste) {
-        alert("⚠️ ERRO: Este link já foi escaneado e já está na lista!");
-        return; // Para tudo aqui e não salva nada
+    if (listaEscaneamentos.some(item => item.link === textoDecodificado)) {
+        alert("⚠️ Este link já consta na sua lista!");
+        return;
     }
 
-    // Se passou pela trava, segue o processo normal
-    const agora = new Date();
-    const dataFormatada = agora.toLocaleString('pt-BR');
     const item = {
         link: textoDecodificado,
-        data: dataFormatada,
+        data: new Date().toLocaleString('pt-BR'),
         operador: operadorAtual,
         grupo: grupoAtual
     };
 
     listaEscaneamentos.unshift(item);
     atualizarTabelaNaTela();
-    enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
-
-    alert("✅ QR Code registrado com sucesso!");
+    enviarParaNuvem(item);
 }
 
-html5QrcodeScanner.render(aoLerSucesso, { qrbox: 250, preferredCamera: "back" });
+async function enviarParaNuvem(item) {
+    try {
+        await addDoc(collection(db, "scans"), item);
+    } catch (e) { console.error("Erro ao salvar:", e); }
+}
 
 function atualizarTabelaNaTela() {
     const corpoTabela = document.getElementById("corpoTabela");
     if (!corpoTabela) return;
-
     corpoTabela.innerHTML = "";
     listaEscaneamentos.forEach((item, index) => {
-        // Corta o link para mostrar apenas os primeiros 15 caracteres + ...
-        const linkCurto = item.link.length > 15 ? item.link.substring(0, 15) + "..." : item.link;
-
+        const linkCurto = item.link.substring(0, 15) + "...";
         corpoTabela.innerHTML += `
             <tr>
-                <td title="${item.link}" style="font-size: 11px; color: #007bff;">${linkCurto}</td>
-                <td style="font-size: 11px;">${item.data}</td>
-                <td style="font-size: 11px;">${item.operador}</td>
-                <td style="text-align:center;">
-                    <button onclick="removerItem(${index})" style="background:#ff4d4d; color:white; border:none; padding:4px 8px; border-radius:4px; font-size: 10px; font-weight:bold;">X</button>
-                </td>
+                <td title="${item.link}">${linkCurto}</td>
+                <td>${item.data}</td>
+                <td>${item.operador}</td>
+                <td><button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:4px 8px; border-radius:4px;">X</button></td>
             </tr>`;
     });
 }
 
-window.removerItem = function(index) {
-if(confirm("Deseja apagar este escaneamento?")) {
-listaEscaneamentos.splice(index, 1);
-atualizarTabelaNaTela();
-}
+window.removerItem = (index) => {
+    if(confirm("Remover da lista?")) {
+        listaEscaneamentos.splice(index, 1);
+        atualizarTabelaNaTela();
+    }
 };
 
+// --- FUNÇÕES DE ADMIN E EXPORTAÇÃO ---
+
 window.exportarParaCSV = function() {
-    if (listaEscaneamentos.length === 0) {
-        alert("Não há dados para exportar ainda!");
-        return;
+    let csv = "Link;Data;Operador;Grupo\n";
+    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Relatorio_${operadorAtual}.csv`;
+    link.click();
+};
+
+window.puxarDadosFiltro = async function() {
+    const grupoBusca = document.getElementById("filtroGrupo").value;
+    if(!grupoBusca) return alert("Digite o nome do grupo!");
+
+    try {
+        const q = query(collection(db, "scans"), where("grupo", "==", grupoBusca));
+        const querySnapshot = await getDocs(q);
+        
+        listaEscaneamentos = []; 
+        querySnapshot.forEach((doc) => {
+            listaEscaneamentos.push(doc.data());
+        });
+        
+        atualizarTabelaNaTela();
+        alert(`Mostrando ${listaEscaneamentos.length} registros do ${grupoBusca}`);
+    } catch (e) {
+        alert("Erro ao buscar dados. Verifique sua conexão.");
     }
+};
 
-    // Cabeçalho do arquivo Excel
-    let conteudoCSV = "Link Completo;Data e Hora;Operador;Grupo\n";
+window.exportarMasterGeral = async function() {
+    if(!confirm("Deseja baixar TODOS os registros do banco de dados?")) return;
+    
+    try {
+        const querySnapshot = await getDocs(collection(db, "scans"));
+        let csv = "Link;Data;Operador;Grupo\n";
+        
+        querySnapshot.forEach((doc) => {
+            const d = doc.data();
+            csv += `${d.link};${d.data};${d.operador};${d.grupo}\n`;
+        });
 
-    listaEscaneamentos.forEach(item => {
-        // Aqui usamos item.link (o link original sem cortes)
-        conteudoCSV += `${item.link};${item.data};${item.operador};${item.grupo}\n`;
-    });
-
-    // Cria o arquivo com codificação que o Excel entende (UTF-8 com BOM)
-    const blob = new Blob(["\ufeff" + conteudoCSV], { type: 'text/csv;charset=utf-8;' });
-    const linkBaixar = document.createElement("a");
-    linkBaixar.href = URL.createObjectURL(blob);
-    linkBaixar.download = `Relatorio_QR_${operadorAtual}.csv`;
-    linkBaixar.click();
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "RELATORIO_GERAL_MASTER.csv";
+        link.click();
+    } catch (e) {
+        alert("Erro na exportação mestre.");
+    }
 };
