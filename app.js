@@ -2,12 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
-apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
-authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
-projectId: "sistema-qr-master",
-storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
-messagingSenderId: "587607393218",
-appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+// SUAS CHAVES AQUI
 };
 
 const app = initializeApp(firebaseConfig);
@@ -36,9 +31,9 @@ qrbox: { width: 250, height: 250 }
 
 function aoLerSucesso(textoDecodificado) {
 if (textoDecodificado === ultimoCodigoLido) {
-return; // Se for igual ao último, ele ignora e não faz nada
+return;
 }
-ultimoCodigoLido = textoDecodificado; // Salva como último lido
+ultimoCodigoLido = textoDecodificado;
 
 const agora = new Date();
 const dataFormatada = agora.toLocaleString('pt-BR');
@@ -53,36 +48,35 @@ listaEscaneamentos.unshift(item);
 atualizarTabelaNaTela();
 enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
 
-alert("QR Code Escaneado com Sucesso!"); // Mensagem de confirmação
+alert("QR Code Escaneado com Sucesso!");
 
-// Opcional: Limpa a trava após 3 segundos se quiser escanear o mesmo de novo
 setTimeout(() => { ultimoCodigoLido = ""; }, 3000);
 }
 
 html5QrcodeScanner.render(aoLerSucesso, { qrbox: 250, preferredCamera: "back" });
 
 function atualizarTabelaNaTela() {
-    const corpoTabela = document.getElementById("corpoTabela");
-    if (!corpoTabela) return;
+const corpoTabela = document.getElementById("corpoTabela");
+if (!corpoTabela) return;
 
-    corpoTabela.innerHTML = "";
-    listaEscaneamentos.forEach((item, index) => {
-        corpoTabela.innerHTML += `
-            <tr>
-                <td>${item.link}</td>
-                <td>${item.data}</td>
-                <td style="text-align:center;">
-                    <button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:5px; border-radius:5px; cursor:pointer;">X</button>
-                </td>
-            </tr>`;
-    });
+corpoTabela.innerHTML = "";
+listaEscaneamentos.forEach((item, index) => {
+    corpoTabela.innerHTML += `
+        <tr>
+            <td>${item.link}</td>
+            <td>${item.data}</td>
+            <td style="text-align:center;">
+                <button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:5px; border-radius:5px; cursor:pointer;">X</button>
+            </td>
+        </tr>`;
+});
 }
 
 window.removerItem = function(index) {
-    if(confirm("Deseja apagar este escaneamento?")) {
-        listaEscaneamentos.splice(index, 1);
-        atualizarTabelaNaTela();
-    }
+if(confirm("Deseja apagar este escaneamento?")) {
+listaEscaneamentos.splice(index, 1);
+atualizarTabelaNaTela();
+}
 };
 
 window.exportarParaCSV = function() {
