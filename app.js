@@ -15,6 +15,20 @@ const db = getFirestore(app);
 let listaEscaneamentos = [];
 let ultimoCodigoLido = "";
 
+// Pergunta o nome e o grupo se não estiverem salvos no celular
+let operadorAtual = localStorage.getItem("operador") || prompt("Digite seu nome de Operador:") || "Visitante";
+let grupoAtual = localStorage.getItem("grupo") || prompt("Digite seu Grupo (ex: Grupo 01):") || "Geral";
+
+// Salva para não ter que digitar toda vez
+localStorage.setItem("operador", operadorAtual);
+localStorage.setItem("grupo", grupoAtual);
+
+// ATUALIZA A TELA: Substitui o "Carregando..." pelo nome real
+const pInfo = document.getElementById("infoUsuario");
+if (pInfo) {
+    pInfo.innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
+}
+
 async function enviarParaNuvem(link, data, operador, grupo) {
 try {
 await addDoc(collection(db, "scans"), {
@@ -35,46 +49,47 @@ qrbox: { width: 250, height: 250 }
 });
 
 function aoLerSucesso(textoDecodificado) {
-if (textoDecodificado === ultimoCodigoLido) {
-return;
-}
-ultimoCodigoLido = textoDecodificado;
+    if (textoDecodificado === ultimoCodigoLido) {
+        alert("ERRO: Este QR Code já foi registrado agora mesmo!");
+        return; 
+    }
 
-const agora = new Date();
-const dataFormatada = agora.toLocaleString('pt-BR');
-const item = {
-    link: textoDecodificado,
-    data: dataFormatada,
-    operador: "Admin Inicial",
-    grupo: "Grupo 01"
-};
+    ultimoCodigoLido = textoDecodificado;
+    
+    const agora = new Date();
+    const dataFormatada = agora.toLocaleString('pt-BR');
+    const item = {
+        link: textoDecodificado,
+        data: dataFormatada,
+        operador: operadorAtual,
+        grupo: grupoAtual
+    };
 
-listaEscaneamentos.unshift(item);
-atualizarTabelaNaTela();
-enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
+    listaEscaneamentos.unshift(item);
+    atualizarTabelaNaTela();
+    enviarParaNuvem(item.link, item.data, item.operador, item.grupo);
 
-alert("QR Code Escaneado com Sucesso!");
-
-setTimeout(() => { ultimoCodigoLido = ""; }, 3000);
+    alert("Sucesso! Código guardado.");
 }
 
 html5QrcodeScanner.render(aoLerSucesso, { qrbox: 250, preferredCamera: "back" });
 
 function atualizarTabelaNaTela() {
-const corpoTabela = document.getElementById("corpoTabela");
-if (!corpoTabela) return;
+    const corpoTabela = document.getElementById("corpoTabela");
+    if (!corpoTabela) return;
 
-corpoTabela.innerHTML = "";
-listaEscaneamentos.forEach((item, index) => {
-    corpoTabela.innerHTML += `
-        <tr>
-            <td>${item.link}</td>
-            <td>${item.data}</td>
-            <td style="text-align:center;">
-                <button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:5px; border-radius:5px; cursor:pointer;">X</button>
-            </td>
-        </tr>`;
-});
+    corpoTabela.innerHTML = "";
+    listaEscaneamentos.forEach((item, index) => {
+        corpoTabela.innerHTML += `
+            <tr>
+                <td><small>${item.link.substring(0, 15)}...</small></td>
+                <td>${item.data}</td>
+                <td>${item.operador} (${item.grupo})</td>
+                <td style="text-align:center;">
+                    <button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:5px 10px; border-radius:5px; font-weight:bold;">X</button>
+                </td>
+            </tr>`;
+    });
 }
 
 window.removerItem = function(index) {
