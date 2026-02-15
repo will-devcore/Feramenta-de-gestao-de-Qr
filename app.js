@@ -1,78 +1,66 @@
-// 1. IMPORTS (Mantendo a ordem correta)
+// 1. TODOS OS IMPORTS NO TOPO
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, doc, getDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// 2. CONFIGURAÇÃO (Preencha com suas chaves)
+// 2. CONFIGURAÇÃO
 const firebaseConfig = {
-    apiKey: "sua_chave",
+    apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
     authDomain: "sistema-qr-master.firebaseapp.com",
     projectId: "sistema-qr-master",
     storageBucket: "sistema-qr-master.appspot.com",
-    messagingSenderId: "seu_id",
-    appId: "seu_id"
+    messagingSenderId: "587607393218",
+    appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
 
-// Persistência da Trava (Lê o que está salvo no celular)
-let listaEscaneamentos = JSON.parse(localStorage.getItem('cacheScans')) || [];
+let listaEscaneamentos = [];
 let operadorAtual = "";
 let grupoAtual = "";
 let scannerIniciado = false;
 
-// --- LOGIN (Seu código original com tratamento de erro) ---
+// --- FUNÇÕES DE ACESSO ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
-    if(!email || !senha) {
-        alert("Preencha e-mail e senha.");
-        return;
-    }
-    signInWithEmailAndPassword(auth, email, senha).catch(err => {
-        alert("Erro: E-mail ou senha inválidos.");
-    });
+    signInWithEmailAndPassword(auth, email, senha).catch(err => alert("Erro: E-mail ou senha inválidos."));
 };
 
 window.fazerLogout = function() {
     signOut(auth).then(() => location.reload());
 };
 
-// --- MONITOR DE ACESSO (Onde o sistema travava) ---
 onAuthStateChanged(auth, async (user) => {
     const telaLogin = document.getElementById("telaLogin");
     const conteudoApp = document.getElementById("conteudoApp");
     const btnSair = document.getElementById("btnSair");
 
     if (user) {
-        try {
-            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-            if (userDoc.exists() && userDoc.data().aprovado) {
-                const dados = userDoc.data();
-                operadorAtual = dados.nome;
-                grupoAtual = dados.grupo;
-                
-                if (dados.cargo === "admin") {
-                    document.getElementById("painelAdmin").style.display = "block";
-                }
-
-                document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
-                telaLogin.style.display = "none";
-                conteudoApp.style.display = "block";
-                btnSair.style.display = "block";
-                
-                if (!scannerIniciado) { iniciarScanner(); }
-                atualizarTabelaNaTela(); // Garante que a lista apareça
-            } else {
-                alert("Acesso pendente ou usuário não encontrado.");
-                signOut(auth);
+        // Busca os dados do seu documento que criamos no Firestore
+        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+        
+        if (userDoc.exists() && userDoc.data().aprovado) {
+            const dados = userDoc.data();
+            operadorAtual = dados.nome;
+            grupoAtual = dados.grupo;
+            
+            // LIBERA O PAINEL SE FOR ADMIN
+            if (dados.cargo === "admin") {
+                document.getElementById("painelAdmin").style.display = "block";
             }
-        } catch (e) {
-            console.error(e);
+
+            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
+            telaLogin.style.display = "none";
+            conteudoApp.style.display = "block";
+            btnSair.style.display = "block";
+            
+            if (!scannerIniciado) { iniciarScanner(); }
+        } else {
+            alert("Acesso pendente de aprovação.");
+            signOut(auth);
         }
     } else {
         telaLogin.style.display = "block";
@@ -81,90 +69,110 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- SCANNER E FOTO (Aqui entra a mágica nova) ---
+// --- SCANNER E TABELA ---
 function iniciarScanner() {
     const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
     html5QrcodeScanner.render(aoLerSucesso);
     scannerIniciado = true;
 }
 
-async function aoLerSucesso(textoDecodificado) {
-    // 1. TRAVA DE SEGURANÇA (Persistente)
+function aoLerSucesso(textoDecodificado) {
     if (listaEscaneamentos.some(item => item.link === textoDecodificado)) {
-        alert("⚠️ Duplicado! Já está na memória.");
+        alert("⚠️ Este link já consta na sua lista!");
         return;
     }
 
-    try {
-        // 2. CAPTURA AUTOMÁTICA (Print do Vídeo)
-        const video = document.querySelector('video');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+    const item = {
+        link: textoDecodificado,
+        data: new Date().toLocaleString('pt-BR'),
+        operador: operadorAtual,
+        grupo: grupoAtual
+    };
 
-        // 3. STORAGE E BANCO
-        const nomeArquivo = `scans/${Date.now()}.jpg`;
-        const storageRef = ref(storage, nomeArquivo);
-        const snapshot = await uploadString(storageRef, fotoBase64, 'data_url');
-        const urlFoto = await getDownloadURL(snapshot.ref);
-
-        const item = {
-            link: textoDecodificado,
-            foto: urlFoto, // Segunda coluna do Excel
-            data: new Date().toLocaleString('pt-BR'),
-            operador: operadorAtual,
-            grupo: grupoAtual
-        };
-
-        // Salva na Memória Local (Trava)
-        listaEscaneamentos.unshift(item);
-        localStorage.setItem('cacheScans', JSON.stringify(listaEscaneamentos));
-
-        await addDoc(collection(db, "scans"), item);
-        atualizarTabelaNaTela();
-    } catch (err) {
-        alert("Erro ao processar foto. Verifique as regras do Storage.");
-    }
+    listaEscaneamentos.unshift(item);
+    atualizarTabelaNaTela();
+    enviarParaNuvem(item);
 }
 
-// --- FUNÇÕES DE EXIBIÇÃO E EXPORTAÇÃO ---
+async function enviarParaNuvem(item) {
+    try {
+        await addDoc(collection(db, "scans"), item);
+    } catch (e) { console.error("Erro ao salvar:", e); }
+}
+
 function atualizarTabelaNaTela() {
-    const corpo = document.getElementById("corpoTabela");
-    if (!corpo) return;
-    corpo.innerHTML = "";
+    const corpoTabela = document.getElementById("corpoTabela");
+    if (!corpoTabela) return;
+    corpoTabela.innerHTML = "";
     listaEscaneamentos.forEach((item, index) => {
-        corpo.innerHTML += `
+        const linkCurto = item.link.substring(0, 15) + "...";
+        corpoTabela.innerHTML += `
             <tr>
-                <td>${item.link.substring(0,10)}...</td>
-                <td><a href="${item.foto}" target="_blank">Ver Foto</a></td>
+                <td title="${item.link}">${linkCurto}</td>
                 <td>${item.data}</td>
-                <td><button onclick="removerItem(${index})">X</button></td>
+                <td>${item.operador}</td>
+                <td><button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:4px 8px; border-radius:4px;">X</button></td>
             </tr>`;
     });
 }
 
-window.removerItem = function(index) {
-    listaEscaneamentos.splice(index, 1);
-    localStorage.setItem('cacheScans', JSON.stringify(listaEscaneamentos));
-    atualizarTabelaNaTela();
+window.removerItem = (index) => {
+    if(confirm("Remover da lista?")) {
+        listaEscaneamentos.splice(index, 1);
+        atualizarTabelaNaTela();
+    }
 };
 
+// --- FUNÇÕES DE ADMIN E EXPORTAÇÃO ---
+
 window.exportarParaCSV = function() {
-    let csv = "Link;Link da Foto;Data;Operador;Grupo\n";
-    listaEscaneamentos.forEach(i => csv += `${i.link};${i.foto};${i.data};${i.operador};${i.grupo}\n`);
+    let csv = "Link;Data;Operador;Grupo\n";
+    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
     const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "relatorio.csv";
+    link.download = `Relatorio_${operadorAtual}.csv`;
     link.click();
 };
 
-window.limparCacheTrava = function() {
-    if(confirm("Limpar memória de travas?")) {
-        localStorage.removeItem('cacheScans');
-        listaEscaneamentos = [];
+window.puxarDadosFiltro = async function() {
+    const grupoBusca = document.getElementById("filtroGrupo").value;
+    if(!grupoBusca) return alert("Digite o nome do grupo!");
+
+    try {
+        const q = query(collection(db, "scans"), where("grupo", "==", grupoBusca));
+        const querySnapshot = await getDocs(q);
+        
+        listaEscaneamentos = []; 
+        querySnapshot.forEach((doc) => {
+            listaEscaneamentos.push(doc.data());
+        });
+        
         atualizarTabelaNaTela();
+        alert(`Mostrando ${listaEscaneamentos.length} registros do ${grupoBusca}`);
+    } catch (e) {
+        alert("Erro ao buscar dados. Verifique sua conexão.");
+    }
+};
+
+window.exportarMasterGeral = async function() {
+    if(!confirm("Deseja baixar TODOS os registros do banco de dados?")) return;
+    
+    try {
+        const querySnapshot = await getDocs(collection(db, "scans"));
+        let csv = "Link;Data;Operador;Grupo\n";
+        
+        querySnapshot.forEach((doc) => {
+            const d = doc.data();
+            csv += `${d.link};${d.data};${d.operador};${d.grupo}\n`;
+        });
+
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "RELATORIO_GERAL_MASTER.csv";
+        link.click();
+    } catch (e) {
+        alert("Erro na exportação mestre.");
     }
 };
