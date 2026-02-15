@@ -28,34 +28,25 @@
             
             <div id="painelAdmin" style="display:none;">
                 <h3>🔧 Painel do Administrador</h3>
-                <input type="text" id="filtroGrupo" placeholder="Nome do Grupo para buscar">
                 <div class="btn-group">
-                    <button onclick="puxarDadosFiltro()" class="btn-filtro">Filtrar Grupo</button>
-                    <button onclick="exportarMasterGeral()" class="btn-master">Exportar Tudo</button>
-                    <button onclick="limparCacheTrava()" class="btn-limpar">Limpar Memória</button>
+                    <button onclick="limparCacheTrava()" class="btn-limpar">Limpar Memória de Travas</button>
                 </div>
             </div>
 
             <div id="reader"></div>
 
-            <div style="text-align:center; color: #666; font-size: 13px; margin: 10px 0;">
-                <p>📸 A foto é capturada automaticamente ao ler o QR Code.</p>
-            </div>
-
             <section class="controles">
-                <h3>Exportar Meus Escaneamentos</h3>
                 <button class="btn-exportar" onclick="exportarParaCSV()">📥 Exportar (Excel)</button>
             </section>
 
             <section class="historico">
                 <h3>Dados na Tela</h3>
                 <div class="container-tabela">
-                    <table id="tabelaDados">
+                    <table>
                         <thead>
                             <tr>
                                 <th>Link</th>
                                 <th>Foto</th> <th>Data/Hora</th>
-                                <th>Operador</th>
                                 <th>Ação</th>
                             </tr>
                         </thead>
