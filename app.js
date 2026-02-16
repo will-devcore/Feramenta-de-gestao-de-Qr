@@ -2,136 +2,71 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, addDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- CONFIGURAÇÃO FIREBASE (COLE SUAS CHAVES AQUI) ---
+// --- CONFIGURAÇÃO (COLE SUAS CREDENCIAIS AQUI) ---
 const firebaseConfig = {
-apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
-authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
-projectId: "sistema-qr-master",
-storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
-messagingSenderId: "587607393218",
-appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+    apiKey: "SUA_API_KEY",
+    authDomain: "seu-projeto.firebaseapp.com",
+    projectId: "seu-projeto",
+    storageBucket: "seu-projeto.appspot.com",
+    messagingSenderId: "seu-id",
+    appId: "seu-app-id"
 };
 
+console.log("1. Script carregado e Firebase iniciando...");
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// --- VARIÁVEIS GLOBAIS ---
-let listaEscaneamentos = [];
-let operadorAtual = "";
-let grupoAtual = "";
-
-// --- SISTEMA DE LOGIN ---
-// --- SISTEMA DE LOGIN (Ajustado para funcionar no botão do HTML) ---
+// --- FUNÇÃO DE LOGIN GLOBAL ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
-
-    if (!email || !senha) {
-        alert("Por favor, preencha todos os campos.");
-        return;
-    }
+    
+    console.log("2. Tentando login com:", email);
 
     signInWithEmailAndPassword(auth, email, senha)
-        .then(() => {
-            console.log("Login autorizado via Auth");
+        .then((userCredential) => {
+            console.log("3. Auth do Firebase deu OK!");
         })
         .catch((error) => {
-            alert("Erro ao entrar: " + error.message);
+            console.error("ERRO NO AUTH:", error.code, error.message);
+            alert("Erro de autenticação: " + error.message);
         });
 };
 
-window.fazerLogout = function() {
-    signOut(auth).then(() => {
-        location.reload();
-    });
-};
-// --- MONITOR DE ACESSO ---
+// --- OBSERVADOR DE ESTADO ---
 onAuthStateChanged(auth, async (user) => {
+    const telaLogin = document.getElementById("telaLogin");
+    const conteudoApp = document.getElementById("conteudoApp");
+
     if (user) {
-        // Busca o perfil do usuário no Firestore
-        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-        if (userDoc.exists()) {
-            const dados = userDoc.data();
-            operadorAtual = dados.nome;
-            grupoAtual = dados.grupo;
-            
-            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-            document.getElementById("telaLogin").style.display = "none";
-            document.getElementById("conteudoApp").style.display = "block";
-            iniciarCamera();
-        } else {
-            alert("Perfil não encontrado no banco de dados.");
-            signOut(auth);
+        console.log("4. Usuário logado detectado. UID:", user.uid);
+        
+        try {
+            const docRef = doc(db, "usuarios", user.uid);
+            const userDoc = await getDoc(docRef);
+
+            if (userDoc.exists()) {
+                console.log("5. Perfil encontrado no Firestore!", userDoc.data());
+                const dados = userDoc.data();
+                
+                document.getElementById("infoUsuario").innerText = `Operador: ${dados.nome} (${dados.grupo})`;
+                telaLogin.style.display = "none";
+                conteudoApp.style.display = "block";
+            } else {
+                console.warn("ALERTA: Documento não existe para o UID:", user.uid);
+                alert("Perfil não configurado no banco. Fale com o Admin.");
+                signOut(auth);
+            }
+        } catch (error) {
+            console.error("ERRO AO BUSCAR FIRESTORE:", error);
+            alert("Erro ao ler banco de dados. Verifique as Regras de Segurança.");
         }
     } else {
-        document.getElementById("telaLogin").style.display = "block";
-        document.getElementById("conteudoApp").style.display = "none";
+        console.log("X. Nenhum usuário logado.");
+        telaLogin.style.display = "block";
+        conteudoApp.style.display = "none";
     }
 });
 
-// --- SCANNER E TRAVA ---
-function iniciarCamera() {
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-    html5QrcodeScanner.render(aoLerSucesso, { preferredCamera: "back" });
-}
-
-function aoLerSucesso(textoDecodificado) {
-    // TRAVA: Verifica se o link já existe na lista atual
-    const jaExiste = listaEscaneamentos.some(item => item.link === textoDecodificado);
-    if (jaExiste) {
-        alert("⚠️ Este QR Code já foi escaneado e está na lista!");
-        return;
-    }
-
-    const item = {
-        link: textoDecodificado,
-        data: new Date().toLocaleString('pt-BR'),
-        operador: operadorAtual,
-        grupo: grupoAtual
-    };
-
-    listaEscaneamentos.unshift(item);
-    atualizarTabelaNaTela();
-    salvarNoFirebase(item);
-    alert("✅ Escaneado com sucesso!");
-}
-
-async function salvarNoFirebase(item) {
-    try {
-        await addDoc(collection(db, "scans"), item);
-    } catch (e) {
-        console.error("Erro ao salvar:", e);
-    }
-}
-
-function atualizarTabelaNaTela() {
-    const corpo = document.getElementById("corpoTabela");
-    corpo.innerHTML = "";
-    listaEscaneamentos.forEach((item, index) => {
-        corpo.innerHTML += `
-            <tr>
-                <td style="word-break: break-all;">${item.link}</td>
-                <td>${item.data}</td>
-                <td>${item.operador}</td>
-                <td><button onclick="removerItem(${index})">X</button></td>
-            </tr>`;
-    });
-}
-
-window.removerItem = function(index) {
-    if(confirm("Remover este registro?")) {
-        listaEscaneamentos.splice(index, 1);
-        atualizarTabelaNaTela();
-    }
-};
-
-window.exportarParaCSV = function() {
-    let csv = "Link;Data;Operador;Grupo\n";
-    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
-    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "relatorio.csv";
-    link.click();
-};
+window.fazerLogout = () => signOut(auth).then(() => location.reload());
