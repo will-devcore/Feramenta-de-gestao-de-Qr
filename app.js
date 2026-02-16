@@ -45,8 +45,7 @@ onAuthStateChanged(auth, async (user) => {
         if (userDoc.exists() && userDoc.data().aprovado) {
             const dados = userDoc.data();
             operadorAtual = dados.nome;
-            grupoAtual = dados.grupo;
-            
+            grupoAtual = dados.grupo;       
             // LIBERA O PAINEL SE FOR ADMIN
             if (dados.cargo === "admin") {
                 document.getElementById("painelAdmin").style.display = "block";
@@ -55,8 +54,7 @@ onAuthStateChanged(auth, async (user) => {
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
             telaLogin.style.display = "none";
             conteudoApp.style.display = "block";
-            btnSair.style.display = "block";
-            
+            btnSair.style.display = "block";       
             if (!scannerIniciado) { iniciarScanner(); }
         } else {
             alert("Acesso pendente de aprovação.");
@@ -142,12 +140,12 @@ window.puxarDadosFiltro = async function() {
     try {
         const q = query(collection(db, "scans"), where("grupo", "==", grupoBusca));
         const querySnapshot = await getDocs(q);
-        
+
         listaEscaneamentos = []; 
         querySnapshot.forEach((doc) => {
             listaEscaneamentos.push(doc.data());
         });
-        
+
         atualizarTabelaNaTela();
         alert(`Mostrando ${listaEscaneamentos.length} registros do ${grupoBusca}`);
     } catch (e) {
@@ -157,11 +155,11 @@ window.puxarDadosFiltro = async function() {
 
 window.exportarMasterGeral = async function() {
     if(!confirm("Deseja baixar TODOS os registros do banco de dados?")) return;
-    
+
     try {
         const querySnapshot = await getDocs(collection(db, "scans"));
         let csv = "Link;Data;Operador;Grupo\n";
-        
+
         querySnapshot.forEach((doc) => {
             const d = doc.data();
             csv += `${d.link};${d.data};${d.operador};${d.grupo}\n`;
