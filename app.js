@@ -22,17 +22,30 @@ let operadorAtual = "";
 let grupoAtual = "";
 
 // --- SISTEMA DE LOGIN ---
+// --- SISTEMA DE LOGIN (Ajustado para funcionar no botão do HTML) ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
+
+    if (!email || !senha) {
+        alert("Por favor, preencha todos os campos.");
+        return;
+    }
+
     signInWithEmailAndPassword(auth, email, senha)
-        .catch(() => alert("E-mail ou senha incorretos. Verifique com o Admin."));
+        .then(() => {
+            console.log("Login autorizado via Auth");
+        })
+        .catch((error) => {
+            alert("Erro ao entrar: " + error.message);
+        });
 };
 
 window.fazerLogout = function() {
-    signOut(auth).then(() => location.reload());
+    signOut(auth).then(() => {
+        location.reload();
+    });
 };
-
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
