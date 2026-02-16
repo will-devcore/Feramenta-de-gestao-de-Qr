@@ -4,12 +4,12 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from
 
 // --- CONFIGURAÇÃO (COLE SUAS CREDENCIAIS AQUI) ---
 const firebaseConfig = {
-    apiKey: "SUA_API_KEY",
-    authDomain: "seu-projeto.firebaseapp.com",
-    projectId: "seu-projeto",
-    storageBucket: "seu-projeto.appspot.com",
-    messagingSenderId: "seu-id",
-    appId: "seu-app-id"
+apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
+authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
+projectId: "sistema-qr-master",
+storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
+messagingSenderId: "587607393218",
+appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
 console.log("1. Script carregado e Firebase iniciando...");
