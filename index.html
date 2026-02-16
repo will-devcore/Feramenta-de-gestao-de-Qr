@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Master - Gestão de QR</title>
+    <title>Sistema QR Master - William Victor</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -13,39 +13,45 @@
         <input type="email" id="emailLogin" placeholder="Seu e-mail">
         <input type="password" id="senhaLogin" placeholder="Sua senha">
         <button onclick="fazerLogin()" class="btn-primario">Entrar</button>
-        <p class="aviso">Solicite seu acesso ao administrador.</p>
+        <p class="aviso">Aguarde aprovação do Admin para acessar.</p>
     </div>
 
     <div id="conteudoApp" style="display: none;">
         <header>
-            <h1>Painel de Controle QR</h1>
-            <div class="user-bar">
+            <div class="header-info">
+                <h1 id="nomeProjeto">Painel de Controle QR</h1>
                 <p id="infoUsuario">Operador: Carregando...</p>
-                <button onclick="fazerLogout()" class="btn-sair">Sair</button>
             </div>
+            <button onclick="fazerLogout()" class="btn-sair">Sair</button>
         </header>
 
         <main>
             <div id="reader"></div>
 
             <section class="controles">
-                <h3>Exportação</h3>
-                <button class="btn-exportar" onclick="exportarParaCSV()">Exportar Master (Excel)</button>
+                <h3>Filtros de Exportação</h3>
+                <div class="filtros">
+                    <button onclick="filtrar('hoje')">Hoje</button>
+                    <button onclick="filtrar('semana')">Semana</button>
+                    <button onclick="exportarParaCSV()" class="btn-excel">Exportar Master (Excel)</button>
+                </div>
             </section>
 
             <section class="historico">
                 <h3>Histórico do Grupo</h3>
-                <table id="tabelaDados">
-                    <thead>
-                        <tr>
-                            <th>Link</th>
-                            <th>Data/Hora</th>
-                            <th>Operador (Grupo)</th>
-                            <th>Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody id="corpoTabela"></tbody>
-                </table>
+                <div class="tabela-container">
+                    <table id="tabelaDados">
+                        <thead>
+                            <tr>
+                                <th>QR Code (Link)</th>
+                                <th>Data/Hora</th>
+                                <th>Evidência</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpoTabela"></tbody>
+                    </table>
+                </div>
             </section>
         </main>
     </div>

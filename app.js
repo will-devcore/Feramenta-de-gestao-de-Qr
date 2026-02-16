@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
 
 const firebaseConfig = {
 apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
@@ -11,37 +13,115 @@ messagingSenderId: "587607393218",
 appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
-const app = initializeApp(firebaseConfig); // Conferido: initializeApp com dois 'p'
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
+let operadorAtual = "";
+let grupoAtual = "";
+let listaEscaneamentos = [];
+
+// --- LOGIN ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
     signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro: " + e.message));
 };
 
+window.fazerLogout = () => signOut(auth).then(() => location.reload());
+
+// --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        try {
-            // Pequena pausa para o Firebase processar a permissão
-            await new Promise(r => setTimeout(r, 500)); 
-            
-            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-            if (userDoc.exists()) {
-                const dados = userDoc.data();
-                document.getElementById("infoUsuario").innerText = `Operador: ${dados.nome} (${dados.grupo})`;
-                document.getElementById("telaLogin").style.display = "none";
-                document.getElementById("conteudoApp").style.display = "block";
-            } else {
-                alert("Usuário logado, mas perfil não encontrado no banco.");
+        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+        if (userDoc.exists()) {
+            const dados = userDoc.data();
+            if (!dados.aprovado) {
+                alert("Aguarde aprovação do Admin.");
+                signOut(auth);
+                return;
             }
-        } catch (error) {
-            console.error(error);
-            alert("Erro de permissão no banco. Verifique as Regras de Segurança no Console.");
+            operadorAtual = dados.nome;
+            grupoAtual = dados.grupo;
+            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+            document.getElementById("telaLogin").style.display = "none";
+            document.getElementById("conteudoApp").style.display = "block";
+            iniciarScanner();
+            carregarDadosDoBanco(); // Busca histórico ao entrar
         }
     } else {
         document.getElementById("telaLogin").style.display = "block";
         document.getElementById("conteudoApp").style.display = "none";
     }
 });
+
+// --- SCANNER COM FOTO E TRAVA ---
+function iniciarScanner() {
+    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    scanner.render(async (texto) => {
+        // 1. TRAVA: Verifica se já existe no grupo
+        const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            alert("⚠️ Este código já foi registrado por alguém do seu grupo!");
+            return;
+        }
+
+        // 2. FOTO: Captura o frame do vídeo
+        const video = document.querySelector('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const fotoData = canvas.toDataURL('image/jpeg', 0.6);
+
+        // 3. STORAGE: Sobe a foto
+        const caminho = `evidencias/${Date.now()}.jpg`;
+        const storageRef = ref(storage, caminho);
+        await uploadString(storageRef, fotoData, 'data_url');
+        const urlFoto = await getDownloadURL(storageRef);
+
+        // 4. FIRESTORE: Salva tudo
+        const novoDoc = {
+            link: texto,
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            foto: urlFoto,
+            timestamp: Date.now()
+        };
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+        alert("✅ Registrado com foto!");
+    });
+}
+
+async function carregarDadosDoBanco() {
+    const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual));
+    const snap = await getDocs(q);
+    listaEscaneamentos = snap.docs.map(d => d.data());
+    atualizarTabela();
+}
+
+function atualizarTabela() {
+    const corpo = document.getElementById("corpoTabela");
+    corpo.innerHTML = listaEscaneamentos.map(item => `
+        <tr>
+            <td style="word-break:break-all">${item.link}</td>
+            <td>${item.data}</td>
+            <td><a href="${item.foto}" target="_blank"><img src="${item.foto}" class="img-miniatura"></a></td>
+            <td><button onclick="alert('Somente Admin pode excluir')">X</button></td>
+        </tr>
+    `).join('');
+}
+
+window.exportarParaCSV = function() {
+    let csv = "Link;Data;Operador;Foto\n";
+    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.foto}\n`);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Relatorio_${grupoAtual}.csv`;
+    link.click();
+};
