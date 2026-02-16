@@ -1,82 +1,73 @@
-// 1. TODOS OS IMPORTS NO TOPO
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// 2. CONFIGURAÇÃO
+// --- CONFIGURAÇÃO FIREBASE (COLE SUAS CHAVES AQUI) ---
 const firebaseConfig = {
-    apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
-    authDomain: "sistema-qr-master.firebaseapp.com",
-    projectId: "sistema-qr-master",
-    storageBucket: "sistema-qr-master.appspot.com",
-    messagingSenderId: "587607393218",
-    appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+    apiKey: "SUA_API_KEY",
+    authDomain: "seu-projeto.firebaseapp.com",
+    projectId: "seu-projeto",
+    storageBucket: "seu-projeto.appspot.com",
+    messagingSenderId: "seu-id",
+    appId: "seu-app-id"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// --- VARIÁVEIS GLOBAIS ---
 let listaEscaneamentos = [];
 let operadorAtual = "";
 let grupoAtual = "";
-let scannerIniciado = false;
 
-// --- FUNÇÕES DE ACESSO ---
+// --- SISTEMA DE LOGIN ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
-    signInWithEmailAndPassword(auth, email, senha).catch(err => alert("Erro: E-mail ou senha inválidos."));
+    signInWithEmailAndPassword(auth, email, senha)
+        .catch(() => alert("E-mail ou senha incorretos. Verifique com o Admin."));
 };
 
 window.fazerLogout = function() {
     signOut(auth).then(() => location.reload());
 };
 
+// --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
-    const telaLogin = document.getElementById("telaLogin");
-    const conteudoApp = document.getElementById("conteudoApp");
-    const btnSair = document.getElementById("btnSair");
-
     if (user) {
-        // Busca os dados do seu documento que criamos no Firestore
+        // Busca o perfil do usuário no Firestore
         const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-        
-        if (userDoc.exists() && userDoc.data().aprovado) {
+        if (userDoc.exists()) {
             const dados = userDoc.data();
             operadorAtual = dados.nome;
-            grupoAtual = dados.grupo;       
-            // LIBERA O PAINEL SE FOR ADMIN
-            if (dados.cargo === "admin") {
-                document.getElementById("painelAdmin").style.display = "block";
-            }
-
-            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} | Grupo: ${grupoAtual}`;
-            telaLogin.style.display = "none";
-            conteudoApp.style.display = "block";
-            btnSair.style.display = "block";       
-            if (!scannerIniciado) { iniciarScanner(); }
+            grupoAtual = dados.grupo;
+            
+            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+            document.getElementById("telaLogin").style.display = "none";
+            document.getElementById("conteudoApp").style.display = "block";
+            iniciarCamera();
         } else {
-            alert("Acesso pendente de aprovação.");
+            alert("Perfil não encontrado no banco de dados.");
             signOut(auth);
         }
     } else {
-        telaLogin.style.display = "block";
-        conteudoApp.style.display = "none";
-        btnSair.style.display = "none";
+        document.getElementById("telaLogin").style.display = "block";
+        document.getElementById("conteudoApp").style.display = "none";
     }
 });
 
-// --- SCANNER E TABELA ---
-function iniciarScanner() {
+// --- SCANNER E TRAVA ---
+function iniciarCamera() {
     const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-    html5QrcodeScanner.render(aoLerSucesso);
-    scannerIniciado = true;
+    html5QrcodeScanner.render(aoLerSucesso, { preferredCamera: "back" });
 }
 
 function aoLerSucesso(textoDecodificado) {
-    if (listaEscaneamentos.some(item => item.link === textoDecodificado)) {
-        alert("⚠️ Este link já consta na sua lista!");
+    // TRAVA: Verifica se o link já existe na lista atual
+    const jaExiste = listaEscaneamentos.some(item => item.link === textoDecodificado);
+    if (jaExiste) {
+        alert("⚠️ Este QR Code já foi escaneado e está na lista!");
         return;
     }
 
@@ -89,39 +80,38 @@ function aoLerSucesso(textoDecodificado) {
 
     listaEscaneamentos.unshift(item);
     atualizarTabelaNaTela();
-    enviarParaNuvem(item);
+    salvarNoFirebase(item);
+    alert("✅ Escaneado com sucesso!");
 }
 
-async function enviarParaNuvem(item) {
+async function salvarNoFirebase(item) {
     try {
         await addDoc(collection(db, "scans"), item);
-    } catch (e) { console.error("Erro ao salvar:", e); }
+    } catch (e) {
+        console.error("Erro ao salvar:", e);
+    }
 }
 
 function atualizarTabelaNaTela() {
-    const corpoTabela = document.getElementById("corpoTabela");
-    if (!corpoTabela) return;
-    corpoTabela.innerHTML = "";
+    const corpo = document.getElementById("corpoTabela");
+    corpo.innerHTML = "";
     listaEscaneamentos.forEach((item, index) => {
-        const linkCurto = item.link.substring(0, 15) + "...";
-        corpoTabela.innerHTML += `
+        corpo.innerHTML += `
             <tr>
-                <td title="${item.link}">${linkCurto}</td>
+                <td style="word-break: break-all;">${item.link}</td>
                 <td>${item.data}</td>
                 <td>${item.operador}</td>
-                <td><button onclick="removerItem(${index})" style="background:red; color:white; border:none; padding:4px 8px; border-radius:4px;">X</button></td>
+                <td><button onclick="removerItem(${index})">X</button></td>
             </tr>`;
     });
 }
 
-window.removerItem = (index) => {
-    if(confirm("Remover da lista?")) {
+window.removerItem = function(index) {
+    if(confirm("Remover este registro?")) {
         listaEscaneamentos.splice(index, 1);
         atualizarTabelaNaTela();
     }
 };
-
-// --- FUNÇÕES DE ADMIN E EXPORTAÇÃO ---
 
 window.exportarParaCSV = function() {
     let csv = "Link;Data;Operador;Grupo\n";
@@ -129,48 +119,6 @@ window.exportarParaCSV = function() {
     const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Relatorio_${operadorAtual}.csv`;
+    link.download = "relatorio.csv";
     link.click();
-};
-
-window.puxarDadosFiltro = async function() {
-    const grupoBusca = document.getElementById("filtroGrupo").value;
-    if(!grupoBusca) return alert("Digite o nome do grupo!");
-
-    try {
-        const q = query(collection(db, "scans"), where("grupo", "==", grupoBusca));
-        const querySnapshot = await getDocs(q);
-
-        listaEscaneamentos = []; 
-        querySnapshot.forEach((doc) => {
-            listaEscaneamentos.push(doc.data());
-        });
-
-        atualizarTabelaNaTela();
-        alert(`Mostrando ${listaEscaneamentos.length} registros do ${grupoBusca}`);
-    } catch (e) {
-        alert("Erro ao buscar dados. Verifique sua conexão.");
-    }
-};
-
-window.exportarMasterGeral = async function() {
-    if(!confirm("Deseja baixar TODOS os registros do banco de dados?")) return;
-
-    try {
-        const querySnapshot = await getDocs(collection(db, "scans"));
-        let csv = "Link;Data;Operador;Grupo\n";
-
-        querySnapshot.forEach((doc) => {
-            const d = doc.data();
-            csv += `${d.link};${d.data};${d.operador};${d.grupo}\n`;
-        });
-
-        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "RELATORIO_GERAL_MASTER.csv";
-        link.click();
-    } catch (e) {
-        alert("Erro na exportação mestre.");
-    }
 };

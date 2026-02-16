@@ -8,53 +8,47 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <h1>Painel de Controle QR</h1>
-        <p id="infoUsuario">Aguardando login...</p>
-        <button id="btnSair" onclick="fazerLogout()" style="display:none; margin: 10px auto; background:#666; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Sair</button>
-    </header>
+    <div id="telaLogin" class="container-login">
+        <h2>Acesso ao Sistema QR</h2>
+        <input type="email" id="emailLogin" placeholder="Seu e-mail">
+        <input type="password" id="senhaLogin" placeholder="Sua senha">
+        <button onclick="fazerLogin()" class="btn-primario">Entrar</button>
+        <p class="aviso">Solicite seu acesso ao administrador.</p>
+    </div>
 
-    <main>
-        <div id="telaLogin" style="display: block; padding: 20px; text-align: center;">
-            <h3>Acesso ao Sistema</h3>
-            <input type="email" id="emailLogin" placeholder="E-mail" style="width: 80%; padding: 10px; margin-bottom: 10px;"><br>
-            <input type="password" id="senhaLogin" placeholder="Senha" style="width: 80%; padding: 10px; margin-bottom: 10px;"><br>
-            <button onclick="fazerLogin()" style="width: 80%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px;">Entrar</button>
-        </div>
-
-        <div id="conteudoApp" style="display: none;">       
-            <div id="painelAdmin" style="display:none; border: 2px solid #007bff; padding: 15px; margin: 20px; border-radius: 10px; background: #f0f8ff; clear: both;">
-                <h3 style="color: #007bff; margin-top: 0;">🔧 Painel do Administrador</h3>
-                <input type="text" id="filtroGrupo" placeholder="Nome do Grupo para buscar" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="puxarDadosFiltro()" style="flex: 1; padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">Filtrar Grupo</button>
-                    <button onclick="exportarMasterGeral()" style="flex: 1; padding: 10px; background: #ffc107; color: black; border: none; border-radius: 5px;">Exportar Tudo</button>
-                </div>
+    <div id="conteudoApp" style="display: none;">
+        <header>
+            <h1>Painel de Controle QR</h1>
+            <div class="user-bar">
+                <p id="infoUsuario">Operador: Carregando...</p>
+                <button onclick="fazerLogout()" class="btn-sair">Sair</button>
             </div>
+        </header>
 
+        <main>
             <div id="reader"></div>
 
             <section class="controles">
-                <h3>Exportar Meus Escaneamentos</h3>
-                <button class="btn-exportar" onclick="exportarParaCSV()">Exportar (Excel)</button>
+                <h3>Exportação</h3>
+                <button class="btn-exportar" onclick="exportarParaCSV()">Exportar Master (Excel)</button>
             </section>
 
             <section class="historico">
-                <h3>Dados na Tela</h3>
+                <h3>Histórico do Grupo</h3>
                 <table id="tabelaDados">
                     <thead>
                         <tr>
                             <th>Link</th>
                             <th>Data/Hora</th>
-                            <th>Operador</th>
+                            <th>Operador (Grupo)</th>
                             <th>Ação</th>
                         </tr>
                     </thead>
                     <tbody id="corpoTabela"></tbody>
                 </table>
             </section>
-        </div>
-    </main>
+        </main>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>
