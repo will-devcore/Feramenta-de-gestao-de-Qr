@@ -4,12 +4,12 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 const firebaseConfig = {
-apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
-authDomain: "https://www.google.com/search?q=sistema-qr-master.firebaseapp.com",
-projectId: "sistema-qr-master",
-storageBucket: "https://www.google.com/search?q=sistema-qr-master.appspot.com",
-messagingSenderId: "587607393218",
-appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
+  apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
+  authDomain: "sistema-qr-master.firebaseapp.com", // Removido o link do Google
+  projectId: "sistema-qr-master",
+  storageBucket: "sistema-qr-master.appspot.com", // Removido o link do Google
+  messagingSenderId: "587607393218",
+  appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
 const app = initializeApp(firebaseConfig);
