@@ -147,13 +147,7 @@ async function onScanSuccess(texto) {
         alert("Erro na conexão: " + e.message);
     } finally {
         status.style.display = "none";
-        
-        // 6. LIBERAÇÃO COM "DELAY" (O SEGREDO)
-        // Esperamos 1.5 segundos antes de permitir o próximo bipe.
-        // Isso dá tempo do operador tirar o celular de cima do QR Code.
-        setTimeout(() => {
-            processandoBipe = false;
-        }, 1500); 
+        processandoBipe = false; // Libera assim que o Firebase terminar
     }
 }
 
