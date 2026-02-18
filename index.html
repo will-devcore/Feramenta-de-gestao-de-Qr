@@ -18,6 +18,35 @@
 
     <div id="conteudoApp" style="display: none;">
         <header>
+            <div style="text-align: right; padding: 10px;">
+            <button onclick="toggleConfig()" class="btn-acao">⚙️ Configurações</button>
+            </div>
+
+            <div id="painelAjustes" style="display:none; background: #f9f9f9; padding: 15px; border-bottom: 2px solid #ddd;">
+                <h3>Ajustes do Scanner</h3>
+                    
+                <label>Potência (FPS):</label>
+                <select id="setFPS">
+                    <option value="15">Normal (15 FPS)</option>
+                    <option value="25">Puxado (25 FPS)</option>
+                    <option value="35">MEGA FOGO (35 FPS)</option>
+                </select>
+
+                <br><br>
+
+                <label>Inatividade:</label>
+                <select id="setInatividade">
+                    <option value="60000">1 Minuto</option>
+                    <option value="180000" selected>3 Minutos</option>
+                    <option value="300000">5 Minutos</option>
+                    <option value="0">Nunca desligar</option>
+                </select>
+
+                <br><br>
+
+                <button onclick="toggleDarkMode()" class="btn-filtro">🌙 Alternar Modo Escuro</button>
+                <button onclick="salvarPreferencias()" class="btn-primario">Aplicar e Salvar</button>
+            </div>
             <div class="header-info">
                 <h1>Painel de Controle QR</h1>
                 <p id="infoUsuario">Operador: Carregando...</p>

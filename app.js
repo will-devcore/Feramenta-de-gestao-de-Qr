@@ -167,3 +167,20 @@ window.verDetalhes = (id) => {
     const scan = listaEscaneamentos.find(s => s.timestamp == id);
     alert(`Detalhes do Registro:\n\nQR: ${scan.link}\nData: ${scan.data}\nResponsável: ${scan.operador}`);
 };
+// Abrir/Fechar painel
+window.toggleConfig = () => {
+    const p = document.getElementById("painelAjustes");
+    p.style.display = p.style.display === "none" ? "block" : "none";
+};
+
+// Alternar Modo Escuro
+window.toggleDarkMode = () => {
+    document.body.classList.toggle("dark-mode");
+    const isDark = document.body.classList.contains("dark-mode");
+    localStorage.setItem("modoEscuro", isDark); // Salva a escolha no celular
+};
+
+// Carregar modo escuro ao abrir o app
+if (localStorage.getItem("modoEscuro") === "true") {
+    document.body.classList.add("dark-mode");
+}
