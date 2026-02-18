@@ -42,7 +42,7 @@ onAuthStateChanged(auth, async (user) => {
             
             operadorAtual = dados.nome;
             grupoAtual = dados.grupo;
-            isAdmin = dados.role === "admin"; // Verifica se é Admin
+            isAdmin = dados.cargo === "admin"; // Verifica se é Admin
 
             // Preenche display e campo de troca de nome
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
