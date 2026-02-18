@@ -116,7 +116,15 @@ function atualizarTabela() {
         <tr>
             <td style="word-break:break-all">${item.link}</td>
             <td>${item.data}</td>
-            <td><a href="${item.foto}" target="_blank"><img src="${item.foto}" class="img-miniatura"></a></td>
+            <td>${item.operador} (${item.grupo})</td> 
+            <td>
+                <a href="${item.foto}" target="_blank">
+                    <img src="${item.foto}" class="img-miniatura">
+                </a>
+            </td>
+            <td>
+                <button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button>
+            </td>
         </tr>
     `).join('');
 }
