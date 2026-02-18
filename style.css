@@ -1,42 +1,102 @@
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; margin: 0; }
-.container-login { max-width: 380px; margin: 80px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
-input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-.btn-primario { width: 100%; padding: 14px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-header { background: #2c3e50; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-#reader { width: 100%; max-width: 500px; margin: 20px auto; border-radius: 8px; overflow: hidden; border: 3px solid #333; }
-.filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-.btn-excel { background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
-.btn-filtro { background: #95a5a6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
-.tabela-container { overflow-x: auto; background: white; border-radius: 8px; margin-top: 15px; }
-table { width: 100%; border-collapse: collapse; min-width: 500px; }
-th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; }
-.img-miniatura { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
-.btn-sair { background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
-/* Classe que será aplicada ao Body */
-body.dark-mode {
-    background-color: #121212;
-    color: #ffffff;
+* { box-sizing: border-box; }
+
+body { 
+    font-family: sans-serif; 
+    background-color: #f0f2f5; 
+    margin: 0; 
+    transition: background 0.3s; 
 }
 
-body.dark-mode #painelAjustes, 
-body.dark-mode .container-login,
-body.dark-mode main {
-    background-color: #1e1e1e !important;
-    color: #ffffff;
-    border-color: #333;
+.container-login { 
+    max-width: 380px; 
+    margin: 80px auto; 
+    background: white; 
+    padding: 30px; 
+    border-radius: 12px; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+    text-align: center; 
 }
 
-body.dark-mode table {
-    background-color: #252525;
-    color: #eee;
+input, select { 
+    width: 100%; 
+    padding: 12px; 
+    margin: 8px 0; 
+    border: 1px solid #ddd; 
+    border-radius: 6px; 
+    font-size: 14px; 
 }
 
-body.dark-mode tr:nth-child(even) {
-    background-color: #2c2c2c;
+.btn-primario { 
+    width: 100%; 
+    padding: 14px; 
+    background: #007bff; 
+    color: white; 
+    border: none; 
+    border-radius: 6px; 
+    font-weight: bold; 
+    cursor: pointer; 
 }
 
-body.dark-mode input, body.dark-mode select {
-    background-color: #333;
-    color: white;
-    border: 1px solid #555;
+header { 
+    background: #2c3e50; 
+    color: white; 
+    padding: 15px 20px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
 }
+
+#reader { 
+    width: 100%; 
+    max-width: 500px; 
+    margin: 10px auto; 
+    border-radius: 8px; 
+    overflow: hidden; 
+    border: 3px solid #333; 
+}
+
+.filtros-avancados { 
+    background: #ffffff; 
+    padding: 15px; 
+    border-radius: 10px; 
+    margin: 10px; 
+    border: 1px solid #ddd;
+    color: #333;
+}
+
+.tabela-container { 
+    overflow-x: auto; 
+    background: white; 
+    margin: 10px; 
+    border-radius: 8px; 
+}
+
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    min-width: 600px; 
+}
+
+th, td { 
+    padding: 12px; 
+    border-bottom: 1px solid #eee; 
+    text-align: left; 
+    font-size: 13px; 
+}
+
+.btn-sair { background: #e74c3c; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; width: 100%; }
+.btn-filtro { background: #95a5a6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
+.btn-excel { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; }
+
+/* DARK MODE */
+body.dark-mode { background-color: #121212; color: #ffffff; }
+body.dark-mode .container-login, 
+body.dark-mode .filtros-avancados, 
+body.dark-mode .tabela-container,
+body.dark-mode #painelAjustes { 
+    background-color: #1e1e1e !important; 
+    color: #ffffff; 
+    border-color: #333; 
+}
+body.dark-mode input, body.dark-mode select { background-color: #333; color: white; border-color: #555; }
+body.dark-mode table { background-color: #252525; color: #eee; }

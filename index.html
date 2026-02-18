@@ -29,6 +29,9 @@
             <div id="painelAjustes" style="display:none; background: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; color: #333; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);">
                 <h3 style="margin-top: 0;">⚙️ Configurações</h3>
                 
+                <label><strong>Operador Ativo (Nome para o Registro):</strong></label><br>
+                <input type="text" id="nomeOperadorTroca" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+
                 <label><strong>Tempo de Inatividade:</strong></label><br>
                 <select id="setInatividade" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
                     <option value="60000">1 Minuto</option>
@@ -48,7 +51,7 @@
 
         <main>
             <div id="statusEnvio" style="display:none; background: #27ae60; color: white; text-align: center; padding: 10px; font-weight: bold;">
-                💾 Salvando registro...
+                💾 Processando dados...
             </div>
 
             <div style="margin-top: 15px; background: #333; color: white; padding: 10px; border-radius: 8px 8px 0 0; text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px;">
@@ -62,20 +65,42 @@
 
             <div id="reader" style="border: 2px solid #333; border-top: none; background: #000;"></div>
 
-            <section style="padding: 15px; display: flex; gap: 10px;">
-                <button onclick="carregarHistorico()" class="btn-filtro" style="flex: 1; padding: 12px;">🔄 Atualizar</button>
-                <button onclick="exportarParaCSV()" class="btn-excel" style="flex: 1; padding: 12px;">📥 Gerar Excel</button>
+            <section style="margin: 10px; padding: 15px; background: #eee; border-radius: 8px; color: #333;">
+                <h4 style="margin-top: 0;">📊 Relatório e Filtros</h4>
+                
+                <label style="font-size: 0.75rem;">Grupo:</label>
+                <select id="filtroGrupo" disabled style="width:100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #ccc;"></select>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 0.75rem;">Data Início:</label>
+                        <input type="date" id="filtroDataInicio" style="width: 100%; padding: 8px;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 0.75rem;">Data Fim:</label>
+                        <input type="date" id="filtroDataFim" style="width: 100%; padding: 8px;">
+                    </div>
+                </div>
+
+                <label style="font-size: 0.75rem;">Operador:</label>
+                <input type="text" id="filtroOperador" placeholder="Nome da pessoa" style="width:100%; padding: 8px; margin-bottom: 15px;">
+
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="gerarRelatorio()" class="btn-primario" style="flex: 2; padding: 10px;">🔍 Buscar</button>
+                    <button onclick="exportarParaCSV()" class="btn-excel" style="flex: 1; padding: 10px;">📥 Excel</button>
+                </div>
             </section>
 
             <section style="padding: 10px;">
-                <h3 style="margin-bottom: 10px;">Histórico Recente</h3>
+                <h3 style="margin-bottom: 10px;">Histórico de Leituras</h3>
                 <div class="tabela-container" style="overflow-x: auto; background: white; border-radius: 5px;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
                         <thead>
-                            <tr style="background: #eee;">
+                            <tr style="background: #eee; color: #333;">
                                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">Status</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">QR Code</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">Data/Hora</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Operador (Grupo)</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">Ação</th>
                             </tr>
                         </thead>

@@ -17,6 +17,7 @@ const auth = getAuth(app);
 
 let operadorAtual = "";
 let grupoAtual = "";
+let isAdmin = false; 
 let listaEscaneamentos = [];
 let html5QrcodeScanner; 
 let timerInatividade; 
@@ -38,15 +39,38 @@ onAuthStateChanged(auth, async (user) => {
         if (userDoc.exists()) {
             const dados = userDoc.data();
             if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
+            
             operadorAtual = dados.nome;
             grupoAtual = dados.grupo;
+            isAdmin = dados.role === "admin"; // Verifica se é Admin
+
+            // Preenche display e campo de troca de nome
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+            if(document.getElementById("nomeOperadorTroca")) {
+                document.getElementById("nomeOperadorTroca").value = operadorAtual;
+            }
+
+            // Configura Seletor de Grupos para Relatório
+            const selectGrupo = document.getElementById("filtroGrupo");
+            if (selectGrupo) {
+                if (isAdmin) {
+                    selectGrupo.disabled = false;
+                    selectGrupo.innerHTML = `
+                        <option value="todos">-- TODOS OS GRUPOS --</option>
+                        <option value="Grupo A">Grupo A</option>
+                        <option value="Grupo B">Grupo B</option>
+                        <option value="Grupo C">Grupo C</option>
+                    `;
+                } else {
+                    selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
+                    selectGrupo.disabled = true;
+                }
+            }
+
             document.getElementById("telaLogin").style.display = "none";
             document.getElementById("conteudoApp").style.display = "block";
             
-            // 1. Recupera as configurações salvas no celular antes de ligar a câmera
             carregarConfiguracoesSalvas();
-            // 2. Inicia o scanner e o histórico
             iniciarScanner();
             carregarHistorico();
         }
@@ -56,13 +80,34 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- MEMÓRIA DAS CONFIGURAÇÕES ---
+// --- MEMÓRIA E CONFIGURAÇÕES ---
 function carregarConfiguracoesSalvas() {
     const fpsSalvo = localStorage.getItem("scannerFPS");
     const inatividadeSalva = localStorage.getItem("scannerInatividade");
     if (fpsSalvo) document.getElementById("setFPS").value = fpsSalvo;
     if (inatividadeSalva) document.getElementById("setInatividade").value = inatividadeSalva;
 }
+
+window.salvarPreferencias = () => {
+    // 1. Troca de Nome (Substituição)
+    const novoNome = document.getElementById("nomeOperadorTroca").value;
+    if (novoNome) operadorAtual = novoNome;
+
+    // 2. Troca de Grupo Ativo (Se for Admin e quiser bipar para outro grupo)
+    if (isAdmin) {
+        const grupoSel = document.getElementById("filtroGrupo").value;
+        if (grupoSel !== "todos") grupoAtual = grupoSel;
+    }
+
+    // 3. Persistência de Hardware
+    localStorage.setItem("scannerFPS", document.getElementById("setFPS").value);
+    localStorage.setItem("scannerInatividade", document.getElementById("setInatividade").value);
+
+    document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+    document.getElementById("painelAjustes").style.display = "none";
+    iniciarScanner();
+    alert("⚙️ Perfil e Scanner atualizados!");
+};
 
 // --- LÓGICA DE ECONOMIA ---
 function resetarTimerInatividade() {
@@ -99,16 +144,20 @@ function iniciarScanner() {
     resetarTimerInatividade();
 }
 
-// --- SUCESSO NO SCAN (CORRIGIDO PARA MOSTRAR NA LISTA) ---
 async function onScanSuccess(texto) {
     resetarTimerInatividade();
 
-    // Trava de Duplicados
+    // Verificação de Grupo para Admin
+    if (grupoAtual === "todos") {
+        alert("⚠️ Selecione um grupo específico nos Ajustes antes de bipar.");
+        return;
+    }
+
     const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
     const snapshot = await getDocs(q);
     
     if (!snapshot.empty) {
-        alert("⚠️ Já registrado pelo grupo!");
+        alert("⚠️ Já registrado por este grupo!");
         return;
     }
 
@@ -124,15 +173,9 @@ async function onScanSuccess(texto) {
             timestamp: Date.now()
         };
 
-        // 1. Salva no Firebase
         await addDoc(collection(db, "scans"), novoDoc);
-        
-        // 2. ADICIONA NA LISTA LOCAL PARA APARECER NA TABELA NA HORA
         listaEscaneamentos.unshift(novoDoc);
-        
-        // 3. ATUALIZA A TABELA VISUAL
         atualizarTabela();
-        
         alert("✅ Salvo!");
     } catch (e) {
         alert("Erro: " + e.message);
@@ -141,23 +184,48 @@ async function onScanSuccess(texto) {
     }
 }
 
-// --- INTERFACE ---
+// --- RELATÓRIOS E FILTROS ---
+window.gerarRelatorio = async function() {
+    const grupoFiltro = document.getElementById("filtroGrupo").value;
+    const dataInicio = document.getElementById("filtroDataInicio").value;
+    const dataFim = document.getElementById("filtroDataFim").value;
+    const nomeFiltro = document.getElementById("filtroOperador").value.toLowerCase();
+
+    try {
+        let q;
+        if (grupoFiltro === "todos" && isAdmin) {
+            q = query(collection(db, "scans"), orderBy("timestamp", "desc"));
+        } else {
+            q = query(collection(db, "scans"), where("grupo", "==", grupoFiltro), orderBy("timestamp", "desc"));
+        }
+
+        const snap = await getDocs(q);
+        let resultados = snap.docs.map(d => d.data());
+
+        // Filtro Manual de Data
+        if (dataInicio && dataFim) {
+            const inicio = new Date(dataInicio + "T00:00:00").getTime();
+            const fim = new Date(dataFim + "T23:59:59").getTime();
+            resultados = resultados.filter(r => r.timestamp >= inicio && r.timestamp <= fim);
+        }
+
+        // Filtro Manual de Operador
+        if (nomeFiltro) {
+            resultados = resultados.filter(r => r.operador.toLowerCase().includes(nomeFiltro));
+        }
+
+        listaEscaneamentos = resultados;
+        atualizarTabela();
+        alert(`Relatório gerado: ${resultados.length} registros.`);
+    } catch (e) {
+        alert("Erro: " + e.message);
+    }
+};
+
+// --- INTERFACE E HISTÓRICO ---
 window.toggleConfig = () => {
     const p = document.getElementById("painelAjustes");
     p.style.display = p.style.display === "none" ? "block" : "none";
-};
-
-window.salvarPreferencias = () => {
-    const fps = document.getElementById("setFPS").value;
-    const inatividade = document.getElementById("setInatividade").value;
-    
-    // Salva permanentemente no celular
-    localStorage.setItem("scannerFPS", fps);
-    localStorage.setItem("scannerInatividade", inatividade);
-
-    document.getElementById("painelAjustes").style.display = "none";
-    iniciarScanner();
-    alert("⚙️ Configurações salvas!");
 };
 
 window.toggleDarkMode = () => {
@@ -165,7 +233,6 @@ window.toggleDarkMode = () => {
     localStorage.setItem("modoEscuro", document.body.classList.contains("dark-mode"));
 };
 
-// --- HISTÓRICO E TABELA ---
 async function carregarHistorico() {
     const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
     const snap = await getDocs(q);
@@ -175,19 +242,17 @@ async function carregarHistorico() {
 
 function atualizarTabela() {
     const corpo = document.getElementById("corpoTabela");
-    // Recalibramos as colunas para mostrar Link, Data e o Operador (Grupo)
     corpo.innerHTML = listaEscaneamentos.map(item => `
         <tr>
             <td><span style="color: #27ae60;">✅ Ok</span></td>
             <td style="word-break:break-all"><strong>${item.link}</strong></td>
             <td>${item.data}</td>
             <td>${item.operador} (${item.grupo})</td> 
-            <td>
-                <button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button>
-            </td>
+            <td><button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button></td>
         </tr>
     `).join('');
 }
+
 window.exportarParaCSV = function() {
     let csv = "Link;Data;Operador;Grupo\n";
     listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
@@ -200,7 +265,7 @@ window.exportarParaCSV = function() {
 
 window.verDetalhes = (id) => {
     const scan = listaEscaneamentos.find(s => s.timestamp == id);
-    alert(`QR: ${scan.link}\nData: ${scan.data}\nOperador: ${scan.operador}`);
+    alert(`QR: ${scan.link}\nData: ${scan.data}\nOperador: ${scan.operador}\nGrupo: ${scan.grupo}`);
 };
 
 if (localStorage.getItem("modoEscuro") === "true") document.body.classList.add("dark-mode");
