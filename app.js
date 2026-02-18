@@ -22,6 +22,8 @@ let listaEscaneamentos = [];
 let html5QrcodeScanner; 
 let timerInatividade; 
 let tempoInatividadeMS = 180000; 
+// 1. Criamos a variável de trava FORA da função (no topo do script)
+let processandoBipe = false;
 
 // --- FUNÇÃO PARA CARREGAR GRUPOS REAIS (DINÂMICO) ---
 async function carregarGruposDinamicos() {
@@ -90,56 +92,70 @@ window.fazerLogin = function() {
 window.fazerLogout = () => signOut(auth).then(() => location.reload());
 
 // --- MONITOR DE ACESSO ---
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        try {
-            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-            if (userDoc.exists()) {
-                const dados = userDoc.data();
-                if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
-                
-                operadorAtual = dados.nome;
-                grupoAtual = dados.grupo;
-                isAdmin = dados.cargo === "admin"; 
+async function onScanSuccess(texto) {
+    // 2. A PRIMEIRA LINHA: Se já estiver processando um bipe, ignora o novo bipe imediatamente
+    if (processandoBipe) return;
+    
+    // 3. ATIVA A TRAVA
+    processandoBipe = true;
 
-                document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-                if(document.getElementById("nomeOperadorTroca")) {
-                    document.getElementById("nomeOperadorTroca").value = operadorAtual;
-                }
+    resetarTimerInatividade();
 
-                // Carregamento Dinâmico com proteção
-                const selectGrupo = document.getElementById("filtroGrupo");
-                if (selectGrupo) {
-                    if (isAdmin) {
-                        // Se falhar o carregamento dos grupos, o login não trava
-                        await carregarGruposDinamicos().catch(e => console.error("Erro grupos:", e));
-                    } else {
-                        selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
-                        selectGrupo.disabled = true;
-                    }
-                }
-                
-                if (window.carregarOperadoresDoGrupo) {
-                    await window.carregarOperadoresDoGrupo().catch(e => console.error("Erro operadores:", e));
-                }
-
-                // SÓ LIBERA A TELA APÓS TUDO ACIMA
-                document.getElementById("telaLogin").style.display = "none";
-                document.getElementById("conteudoApp").style.display = "block";
-                
-                carregarConfiguracoesSalvas();
-                iniciarScanner();
-                carregarHistorico();
-            }
-        } catch (error) {
-            console.error("Erro no processo de login:", error);
-            alert("Erro ao carregar perfil. Verifique sua conexão.");
-        }
-    } else {
-        document.getElementById("telaLogin").style.display = "block";
-        document.getElementById("conteudoApp").style.display = "none";
+    if (!grupoAtual || grupoAtual === "todos") {
+        alert("⚠️ Selecione um grupo antes de bipar.");
+        processandoBipe = false; // Libera a trava se deu erro de grupo
+        return;
     }
-});
+
+    const status = document.getElementById("statusEnvio");
+    status.style.display = "block";
+
+    try {
+        // 4. CONSULTA DE SEGURANÇA
+        const q = query(
+            collection(db, "scans"), 
+            where("link", "==", texto.trim()), 
+            where("grupo", "==", grupoAtual)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            alert(`❌ JÁ REGISTRADO: O código [${texto}] já existe neste grupo.`);
+            // A trava será liberada no bloco 'finally'
+            return; 
+        }
+
+        // 5. GRAVAÇÃO
+        const novoDoc = {
+            link: texto.trim(),
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            timestamp: Date.now()
+        };
+
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+        
+        // Alerta sonoro ou vibração aqui seria bom!
+        console.log("✅ Gravado com sucesso!");
+
+    } catch (e) {
+        console.error("Erro:", e);
+        alert("Erro na conexão: " + e.message);
+    } finally {
+        status.style.display = "none";
+        
+        // 6. LIBERAÇÃO COM "DELAY" (O SEGREDO)
+        // Esperamos 1.5 segundos antes de permitir o próximo bipe.
+        // Isso dá tempo do operador tirar o celular de cima do QR Code.
+        setTimeout(() => {
+            processandoBipe = false;
+        }, 1500); 
+    }
+}
 
 // --- MEMÓRIA E CONFIGURAÇÕES ---
 function carregarConfiguracoesSalvas() {
