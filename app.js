@@ -75,7 +75,7 @@ function iniciarScanner() {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth; canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            const fotoData = canvas.toDataURL('image/jpeg', 0.6);
+            const fotoData = canvas.toDataURL('image/jpeg', 0.3);
 
             // Upload Storage
             const caminho = `evidencias/${Date.now()}.jpg`;
