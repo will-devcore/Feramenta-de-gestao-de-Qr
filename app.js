@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Configuração corrigida (Sem os links de busca do Google)
 const firebaseConfig = {
     apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
     authDomain: "sistema-qr-master.firebaseapp.com",
@@ -19,12 +18,13 @@ const auth = getAuth(app);
 let operadorAtual = "";
 let grupoAtual = "";
 let listaEscaneamentos = [];
+let html5QrcodeScanner; // Variável para controlar o scanner
+let timerInatividade;  // Variável para o tempo de desligamento
 
 // --- LOGIN ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
-    // O erro de rede deve sumir agora com o authDomain corrigido
     signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro ao entrar: " + e.message));
 };
 
@@ -54,19 +54,42 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- SCANNER SIMPLIFICADO (SEM FOTO) ---
+// --- LÓGICA DE ECONOMIA DE ENERGIA ---
+function resetarTimerInatividade() {
+    if (timerInatividade) clearTimeout(timerInatividade);
+    
+    // Define 3 minutos (180000ms) para desligar por falta de uso
+    timerInatividade = setTimeout(() => {
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear().then(() => {
+                const readerDiv = document.getElementById("reader");
+                readerDiv.innerHTML = `
+                    <div style="text-align:center; padding: 25px; border: 2px dashed #ff9800; border-radius: 10px; background: #fff5e6;">
+                        <p style="font-size: 1.2rem;">🔋 <strong>Modo de Economia</strong></p>
+                        <p>A câmera foi desligada para poupar bateria.</p>
+                        <button onclick="window.location.reload()" style="background:#27ae60; color:white; border:none; padding:12px 25px; border-radius:5px; cursor:pointer; font-weight:bold;">🔄 LIGAR CÂMERA</button>
+                    </div>
+                `;
+                console.log("Scanner desligado por inatividade.");
+            });
+        }
+    }, 180000); 
+}
+
+// --- SCANNER SIMPLIFICADO ---
 function iniciarScanner() {
-    // Configurações para aumentar a sensibilidade
     const config = { 
-        fps: 20, // Aumentamos de 10 para 20 para ler mais rápido
-        qrbox: { width: 280, height: 280 }, // Área de foco maior
+        fps: 25, 
+        qrbox: { width: 280, height: 280 }, 
         aspectRatio: 1.0 
     };
     
-    const scanner = new Html5QrcodeScanner("reader", config, false);
+    html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
     
-    scanner.render(async (texto) => {
-        // Trava de Duplicados por Grupo
+    html5QrcodeScanner.render(async (texto) => {
+        // Se leu um QR Code, reseta o tempo de inatividade
+        resetarTimerInatividade();
+
         const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
         const snapshot = await getDocs(q);
         
@@ -79,7 +102,6 @@ function iniciarScanner() {
         status.style.display = "block";
 
         try {
-            // Salva apenas os dados de texto no Firestore
             const novoDoc = {
                 link: texto,
                 data: new Date().toLocaleString('pt-BR'),
@@ -98,10 +120,12 @@ function iniciarScanner() {
             status.style.display = "none";
         }
     });
+
+    // Inicia o cronômetro assim que o scanner abre
+    resetarTimerInatividade();
 }
 
 async function carregarHistorico() {
-    // Busca no banco 'scans' filtrando pelo seu grupo, do mais novo para o mais antigo
     const q = query(
         collection(db, "scans"), 
         where("grupo", "==", grupoAtual), 
@@ -129,7 +153,6 @@ function atualizarTabela() {
     `).join('');
 }
 
-// Relatório Master para Excel
 window.exportarParaCSV = function() {
     let csv = "Link;Data;Operador;Grupo\n";
     listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
