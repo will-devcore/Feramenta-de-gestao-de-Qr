@@ -42,7 +42,7 @@ onAuthStateChanged(auth, async (user) => {
             
             operadorAtual = dados.nome;
             grupoAtual = dados.grupo;
-            isAdmin = dados.cargo === "admin"; // Verifica se é Admin
+            isAdmin = dados.cargo === "admin"; // Verifica se é Admin usando 'cargo'
 
             // Preenche display e campo de troca de nome
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
@@ -50,22 +50,24 @@ onAuthStateChanged(auth, async (user) => {
                 document.getElementById("nomeOperadorTroca").value = operadorAtual;
             }
 
-            // Configura Seletor de Grupos para Relatório
+            // --- NOVO BLOCO DINÂMICO ---
             const selectGrupo = document.getElementById("filtroGrupo");
             if (selectGrupo) {
                 if (isAdmin) {
-                    selectGrupo.disabled = false;
-                    selectGrupo.innerHTML = `
-                        <option value="todos">-- TODOS OS GRUPOS --</option>
-                        <option value="Grupo A">Grupo A</option>
-                        <option value="Grupo B">Grupo B</option>
-                        <option value="Grupo C">Grupo C</option>
-                    `;
+                    // Carrega todos os grupos que existem no banco de dados automaticamente
+                    await carregarGruposDinamicos();
                 } else {
+                    // Operador comum só vê o seu próprio grupo
                     selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
                     selectGrupo.disabled = true;
                 }
             }
+            
+            // Carrega os nomes das pessoas do grupo atual para sugestão no filtro
+            if (window.carregarOperadoresDoGrupo) {
+                await window.carregarOperadoresDoGrupo();
+            }
+            // ---------------------------
 
             document.getElementById("telaLogin").style.display = "none";
             document.getElementById("conteudoApp").style.display = "block";

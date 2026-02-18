@@ -83,7 +83,11 @@
                 </div>
 
                 <label style="font-size: 0.75rem;">Operador:</label>
-                <input type="text" id="filtroOperador" placeholder="Nome da pessoa" style="width:100%; padding: 8px; margin-bottom: 15px;">
+                <label>Operador:</label>
+                <input type="text" id="filtroOperador" list="listaOperadoresSugestao" placeholder="Digite ou selecione">
+
+                <datalist id="listaOperadoresSugestao">
+                </datalist>
 
                 <div style="display: flex; gap: 10px;">
                     <button onclick="gerarRelatorio()" class="btn-primario" style="flex: 2; padding: 10px;">🔍 Buscar</button>
