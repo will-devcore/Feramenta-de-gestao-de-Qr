@@ -56,7 +56,15 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- SCANNER SIMPLIFICADO (SEM FOTO) ---
 function iniciarScanner() {
-    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    // Configurações para aumentar a sensibilidade
+    const config = { 
+        fps: 20, // Aumentamos de 10 para 20 para ler mais rápido
+        qrbox: { width: 280, height: 280 }, // Área de foco maior
+        aspectRatio: 1.0 
+    };
+    
+    const scanner = new Html5QrcodeScanner("reader", config, false);
+    
     scanner.render(async (texto) => {
         // Trava de Duplicados por Grupo
         const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
@@ -93,7 +101,13 @@ function iniciarScanner() {
 }
 
 async function carregarHistorico() {
-    const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
+    // Busca no banco 'scans' filtrando pelo seu grupo, do mais novo para o mais antigo
+    const q = query(
+        collection(db, "scans"), 
+        where("grupo", "==", grupoAtual), 
+        orderBy("timestamp", "desc")
+    );
+    
     const snap = await getDocs(q);
     listaEscaneamentos = snap.docs.map(d => d.data());
     atualizarTabela();
@@ -103,6 +117,7 @@ function atualizarTabela() {
     const corpo = document.getElementById("corpoTabela");
     corpo.innerHTML = listaEscaneamentos.map(item => `
         <tr>
+            <td><span style="color: #27ae60;">✅ Sincronizado</span></td>
             <td style="word-break:break-all"><strong>${item.link}</strong></td>
             <td>${item.data}</td>
             <td>${item.operador} (${item.grupo})</td> 
