@@ -23,6 +23,63 @@ let html5QrcodeScanner;
 let timerInatividade; 
 let tempoInatividadeMS = 180000; 
 
+// --- FUNÇÃO PARA CARREGAR GRUPOS REAIS (DINÂMICO) ---
+async function carregarGruposDinamicos() {
+    const selectGrupo = document.getElementById("filtroGrupo");
+    if (!selectGrupo) return;
+
+    try {
+        const querySnapshot = await getDocs(collection(db, "usuarios"));
+        const gruposSet = new Set(); // O Set impede que nomes de grupos se repitam
+        
+        querySnapshot.forEach(doc => {
+            const d = doc.data();
+            if (d.grupo) gruposSet.add(d.grupo);
+        });
+
+        let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
+        gruposSet.forEach(g => {
+            opcoes += `<option value="${g}">${g}</option>`;
+        });
+        
+        selectGrupo.innerHTML = opcoes;
+        selectGrupo.disabled = false;
+        
+        // Sempre que o Admin trocar o grupo no select, atualizamos a lista de operadores
+        selectGrupo.onchange = () => window.carregarOperadoresDoGrupo();
+        
+    } catch (e) {
+        console.error("Erro ao carregar grupos:", e);
+    }
+}
+
+// --- FUNÇÃO PARA CARREGAR OPERADORES DO GRUPO (SUGESTÃO) ---
+window.carregarOperadoresDoGrupo = async function() {
+    const grupoSelecionado = document.getElementById("filtroGrupo").value;
+    const datalist = document.getElementById("listaOperadoresSugestao");
+    if (!datalist) return;
+
+    try {
+        let q;
+        // Se selecionar "todos", buscamos todos os usuários. Se selecionar um grupo, filtramos.
+        if (grupoSelecionado === "todos") {
+            q = query(collection(db, "usuarios"));
+        } else {
+            q = query(collection(db, "usuarios"), where("grupo", "==", grupoSelecionado));
+        }
+
+        const snap = await getDocs(q);
+        let html = "";
+        snap.forEach(doc => {
+            const user = doc.data();
+            html += `<option value="${user.nome}">`;
+        });
+        datalist.innerHTML = html;
+    } catch (e) {
+        console.error("Erro ao buscar operadores:", e);
+    }
+};
+
 // --- LOGIN ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
@@ -35,46 +92,48 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-        if (userDoc.exists()) {
-            const dados = userDoc.data();
-            if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
-            
-            operadorAtual = dados.nome;
-            grupoAtual = dados.grupo;
-            isAdmin = dados.cargo === "admin"; // Verifica se é Admin usando 'cargo'
+        try {
+            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+            if (userDoc.exists()) {
+                const dados = userDoc.data();
+                if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
+                
+                operadorAtual = dados.nome;
+                grupoAtual = dados.grupo;
+                isAdmin = dados.cargo === "admin"; 
 
-            // Preenche display e campo de troca de nome
-            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-            if(document.getElementById("nomeOperadorTroca")) {
-                document.getElementById("nomeOperadorTroca").value = operadorAtual;
-            }
-
-            // --- NOVO BLOCO DINÂMICO ---
-            const selectGrupo = document.getElementById("filtroGrupo");
-            if (selectGrupo) {
-                if (isAdmin) {
-                    // Carrega todos os grupos que existem no banco de dados automaticamente
-                    await carregarGruposDinamicos();
-                } else {
-                    // Operador comum só vê o seu próprio grupo
-                    selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
-                    selectGrupo.disabled = true;
+                document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+                if(document.getElementById("nomeOperadorTroca")) {
+                    document.getElementById("nomeOperadorTroca").value = operadorAtual;
                 }
-            }
-            
-            // Carrega os nomes das pessoas do grupo atual para sugestão no filtro
-            if (window.carregarOperadoresDoGrupo) {
-                await window.carregarOperadoresDoGrupo();
-            }
-            // ---------------------------
 
-            document.getElementById("telaLogin").style.display = "none";
-            document.getElementById("conteudoApp").style.display = "block";
-            
-            carregarConfiguracoesSalvas();
-            iniciarScanner();
-            carregarHistorico();
+                // Carregamento Dinâmico com proteção
+                const selectGrupo = document.getElementById("filtroGrupo");
+                if (selectGrupo) {
+                    if (isAdmin) {
+                        // Se falhar o carregamento dos grupos, o login não trava
+                        await carregarGruposDinamicos().catch(e => console.error("Erro grupos:", e));
+                    } else {
+                        selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
+                        selectGrupo.disabled = true;
+                    }
+                }
+                
+                if (window.carregarOperadoresDoGrupo) {
+                    await window.carregarOperadoresDoGrupo().catch(e => console.error("Erro operadores:", e));
+                }
+
+                // SÓ LIBERA A TELA APÓS TUDO ACIMA
+                document.getElementById("telaLogin").style.display = "none";
+                document.getElementById("conteudoApp").style.display = "block";
+                
+                carregarConfiguracoesSalvas();
+                iniciarScanner();
+                carregarHistorico();
+            }
+        } catch (error) {
+            console.error("Erro no processo de login:", error);
+            alert("Erro ao carregar perfil. Verifique sua conexão.");
         }
     } else {
         document.getElementById("telaLogin").style.display = "block";
@@ -271,60 +330,3 @@ window.verDetalhes = (id) => {
 };
 
 if (localStorage.getItem("modoEscuro") === "true") document.body.classList.add("dark-mode");
-
-// --- FUNÇÃO PARA CARREGAR GRUPOS REAIS (DINÂMICO) ---
-async function carregarGruposDinamicos() {
-    const selectGrupo = document.getElementById("filtroGrupo");
-    if (!selectGrupo) return;
-
-    try {
-        const querySnapshot = await getDocs(collection(db, "usuarios"));
-        const gruposSet = new Set(); // O Set impede que nomes de grupos se repitam
-        
-        querySnapshot.forEach(doc => {
-            const d = doc.data();
-            if (d.grupo) gruposSet.add(d.grupo);
-        });
-
-        let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
-        gruposSet.forEach(g => {
-            opcoes += `<option value="${g}">${g}</option>`;
-        });
-        
-        selectGrupo.innerHTML = opcoes;
-        selectGrupo.disabled = false;
-        
-        // Sempre que o Admin trocar o grupo no select, atualizamos a lista de operadores
-        selectGrupo.onchange = () => window.carregarOperadoresDoGrupo();
-        
-    } catch (e) {
-        console.error("Erro ao carregar grupos:", e);
-    }
-}
-
-// --- FUNÇÃO PARA CARREGAR OPERADORES DO GRUPO (SUGESTÃO) ---
-window.carregarOperadoresDoGrupo = async function() {
-    const grupoSelecionado = document.getElementById("filtroGrupo").value;
-    const datalist = document.getElementById("listaOperadoresSugestao");
-    if (!datalist) return;
-
-    try {
-        let q;
-        // Se selecionar "todos", buscamos todos os usuários. Se selecionar um grupo, filtramos.
-        if (grupoSelecionado === "todos") {
-            q = query(collection(db, "usuarios"));
-        } else {
-            q = query(collection(db, "usuarios"), where("grupo", "==", grupoSelecionado));
-        }
-
-        const snap = await getDocs(q);
-        let html = "";
-        snap.forEach(doc => {
-            const user = doc.data();
-            html += `<option value="${user.nome}">`;
-        });
-        datalist.innerHTML = html;
-    } catch (e) {
-        console.error("Erro ao buscar operadores:", e);
-    }
-};
