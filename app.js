@@ -271,3 +271,60 @@ window.verDetalhes = (id) => {
 };
 
 if (localStorage.getItem("modoEscuro") === "true") document.body.classList.add("dark-mode");
+
+// --- FUNÇÃO PARA CARREGAR GRUPOS REAIS (DINÂMICO) ---
+async function carregarGruposDinamicos() {
+    const selectGrupo = document.getElementById("filtroGrupo");
+    if (!selectGrupo) return;
+
+    try {
+        const querySnapshot = await getDocs(collection(db, "usuarios"));
+        const gruposSet = new Set(); // O Set impede que nomes de grupos se repitam
+        
+        querySnapshot.forEach(doc => {
+            const d = doc.data();
+            if (d.grupo) gruposSet.add(d.grupo);
+        });
+
+        let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
+        gruposSet.forEach(g => {
+            opcoes += `<option value="${g}">${g}</option>`;
+        });
+        
+        selectGrupo.innerHTML = opcoes;
+        selectGrupo.disabled = false;
+        
+        // Sempre que o Admin trocar o grupo no select, atualizamos a lista de operadores
+        selectGrupo.onchange = () => window.carregarOperadoresDoGrupo();
+        
+    } catch (e) {
+        console.error("Erro ao carregar grupos:", e);
+    }
+}
+
+// --- FUNÇÃO PARA CARREGAR OPERADORES DO GRUPO (SUGESTÃO) ---
+window.carregarOperadoresDoGrupo = async function() {
+    const grupoSelecionado = document.getElementById("filtroGrupo").value;
+    const datalist = document.getElementById("listaOperadoresSugestao");
+    if (!datalist) return;
+
+    try {
+        let q;
+        // Se selecionar "todos", buscamos todos os usuários. Se selecionar um grupo, filtramos.
+        if (grupoSelecionado === "todos") {
+            q = query(collection(db, "usuarios"));
+        } else {
+            q = query(collection(db, "usuarios"), where("grupo", "==", grupoSelecionado));
+        }
+
+        const snap = await getDocs(q);
+        let html = "";
+        snap.forEach(doc => {
+            const user = doc.data();
+            html += `<option value="${user.nome}">`;
+        });
+        datalist.innerHTML = html;
+    } catch (e) {
+        console.error("Erro ao buscar operadores:", e);
+    }
+};
