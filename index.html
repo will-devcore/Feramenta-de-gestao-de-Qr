@@ -19,20 +19,23 @@
     <div id="conteudoApp" style="display: none;">
         <header>
             <div class="header-info">
-                <h1 id="nomeProjeto">Painel de Controle QR</h1>
+                <h1>Painel de Controle QR</h1>
                 <p id="infoUsuario">Operador: Carregando...</p>
             </div>
             <button onclick="fazerLogout()" class="btn-sair">Sair</button>
         </header>
 
         <main>
+            <div id="statusEnvio" style="display:none; background: #f39c12; color: white; text-align: center; padding: 10px; font-weight: bold;">
+                📸 Processando foto e salvando no banco...
+            </div>
+
             <div id="reader"></div>
 
             <section class="controles">
-                <h3>Filtros de Exportação</h3>
+                <h3>Exportação e Filtros</h3>
                 <div class="filtros">
-                    <button onclick="filtrar('hoje')">Hoje</button>
-                    <button onclick="filtrar('semana')">Semana</button>
+                    <button onclick="filtrar('hoje')" class="btn-filtro">Hoje</button>
                     <button onclick="exportarParaCSV()" class="btn-excel">Exportar Master (Excel)</button>
                 </div>
             </section>
@@ -40,13 +43,12 @@
             <section class="historico">
                 <h3>Histórico do Grupo</h3>
                 <div class="tabela-container">
-                    <table id="tabelaDados">
+                    <table>
                         <thead>
                             <tr>
                                 <th>QR Code (Link)</th>
                                 <th>Data/Hora</th>
                                 <th>Evidência</th>
-                                <th>Ação</th>
                             </tr>
                         </thead>
                         <tbody id="corpoTabela"></tbody>

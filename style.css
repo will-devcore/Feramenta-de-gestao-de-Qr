@@ -3,13 +3,12 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; margin: 
 input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
 .btn-primario { width: 100%; padding: 14px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
 header { background: #2c3e50; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-.header-info h1 { margin: 0; font-size: 1.2rem; }
 #reader { width: 100%; max-width: 500px; margin: 20px auto; border-radius: 8px; overflow: hidden; border: 3px solid #333; }
 .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-.btn-excel { background: #27ae60 !important; color: white; }
-.tabela-container { overflow-x: auto; background: white; border-radius: 8px; }
-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+.btn-excel { background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+.btn-filtro { background: #95a5a6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+.tabela-container { overflow-x: auto; background: white; border-radius: 8px; margin-top: 15px; }
+table { width: 100%; border-collapse: collapse; min-width: 500px; }
 th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; }
-th { background: #f8f9fa; color: #333; }
-.img-miniatura { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; cursor: pointer; }
-.btn-sair { background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; }
+.img-miniatura { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+.btn-sair { background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }

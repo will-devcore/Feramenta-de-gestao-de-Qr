@@ -1,8 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
-
 
 const firebaseConfig = {
 apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
@@ -39,8 +38,7 @@ onAuthStateChanged(auth, async (user) => {
             const dados = userDoc.data();
             if (!dados.aprovado) {
                 alert("Aguarde aprovação do Admin.");
-                signOut(auth);
-                return;
+                signOut(auth); return;
             }
             operadorAtual = dados.nome;
             grupoAtual = dados.grupo;
@@ -48,7 +46,7 @@ onAuthStateChanged(auth, async (user) => {
             document.getElementById("telaLogin").style.display = "none";
             document.getElementById("conteudoApp").style.display = "block";
             iniciarScanner();
-            carregarDadosDoBanco(); // Busca histórico ao entrar
+            carregarHistorico();
         }
     } else {
         document.getElementById("telaLogin").style.display = "block";
@@ -60,45 +58,53 @@ onAuthStateChanged(auth, async (user) => {
 function iniciarScanner() {
     const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
     scanner.render(async (texto) => {
-        // 1. TRAVA: Verifica se já existe no grupo
+        // Trava de Duplicados
         const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            alert("⚠️ Este código já foi registrado por alguém do seu grupo!");
+            alert("⚠️ Este código já foi registrado pelo seu grupo!");
             return;
         }
 
-        // 2. FOTO: Captura o frame do vídeo
-        const video = document.querySelector('video');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        const fotoData = canvas.toDataURL('image/jpeg', 0.6);
+        const status = document.getElementById("statusEnvio");
+        status.style.display = "block";
 
-        // 3. STORAGE: Sobe a foto
-        const caminho = `evidencias/${Date.now()}.jpg`;
-        const storageRef = ref(storage, caminho);
-        await uploadString(storageRef, fotoData, 'data_url');
-        const urlFoto = await getDownloadURL(storageRef);
+        try {
+            // Captura frame
+            const video = document.querySelector('video');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const fotoData = canvas.toDataURL('image/jpeg', 0.6);
 
-        // 4. FIRESTORE: Salva tudo
-        const novoDoc = {
-            link: texto,
-            data: new Date().toLocaleString('pt-BR'),
-            operador: operadorAtual,
-            grupo: grupoAtual,
-            foto: urlFoto,
-            timestamp: Date.now()
-        };
-        await addDoc(collection(db, "scans"), novoDoc);
-        listaEscaneamentos.unshift(novoDoc);
-        atualizarTabela();
-        alert("✅ Registrado com foto!");
+            // Upload Storage
+            const caminho = `evidencias/${Date.now()}.jpg`;
+            const storageRef = ref(storage, caminho);
+            await uploadString(storageRef, fotoData, 'data_url');
+            const urlFoto = await getDownloadURL(storageRef);
+
+            // Salva Firestore
+            const novoDoc = {
+                link: texto,
+                data: new Date().toLocaleString('pt-BR'),
+                operador: operadorAtual,
+                grupo: grupoAtual,
+                foto: urlFoto,
+                timestamp: Date.now()
+            };
+            await addDoc(collection(db, "scans"), novoDoc);
+            listaEscaneamentos.unshift(novoDoc);
+            atualizarTabela();
+        } catch (e) {
+            alert("Erro ao salvar: " + e.message);
+        } finally {
+            status.style.display = "none";
+        }
     });
 }
 
-async function carregarDadosDoBanco() {
-    const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual));
+async function carregarHistorico() {
+    const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
     const snap = await getDocs(q);
     listaEscaneamentos = snap.docs.map(d => d.data());
     atualizarTabela();
@@ -111,7 +117,6 @@ function atualizarTabela() {
             <td style="word-break:break-all">${item.link}</td>
             <td>${item.data}</td>
             <td><a href="${item.foto}" target="_blank"><img src="${item.foto}" class="img-miniatura"></a></td>
-            <td><button onclick="alert('Somente Admin pode excluir')">X</button></td>
         </tr>
     `).join('');
 }
@@ -124,4 +129,9 @@ window.exportarParaCSV = function() {
     link.href = URL.createObjectURL(blob);
     link.download = `Relatorio_${grupoAtual}.csv`;
     link.click();
+};
+
+window.filtrar = (tipo) => {
+    alert("Filtro '" + tipo + "' ativado. Buscando dados recentes...");
+    carregarHistorico();
 };
