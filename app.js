@@ -18,8 +18,9 @@ const auth = getAuth(app);
 let operadorAtual = "";
 let grupoAtual = "";
 let listaEscaneamentos = [];
-let html5QrcodeScanner; // Variável para controlar o scanner
-let timerInatividade;  // Variável para o tempo de desligamento
+let html5QrcodeScanner; 
+let timerInatividade; 
+let tempoInatividadeMS = 180000; // Inicia com 3 minutos padrão
 
 // --- LOGIN ---
 window.fazerLogin = function() {
@@ -45,7 +46,8 @@ onAuthStateChanged(auth, async (user) => {
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
             document.getElementById("telaLogin").style.display = "none";
             document.getElementById("conteudoApp").style.display = "block";
-            iniciarScanner();
+            carregarConfiguracoesSalvas(); // Recupera o que foi salvo antes
+            iniciarScanner(); // Agora inicia com os valores recuperados
             carregarHistorico();
         }
     } else {
@@ -58,72 +60,132 @@ onAuthStateChanged(auth, async (user) => {
 function resetarTimerInatividade() {
     if (timerInatividade) clearTimeout(timerInatividade);
     
-    // Define 3 minutos (180000ms) para desligar por falta de uso
+    // Se o tempo for 0, o modo de economia está desativado
+    if (tempoInatividadeMS === 0) return;
+
     timerInatividade = setTimeout(() => {
         if (html5QrcodeScanner) {
             html5QrcodeScanner.clear().then(() => {
                 const readerDiv = document.getElementById("reader");
                 readerDiv.innerHTML = `
-                    <div style="text-align:center; padding: 25px; border: 2px dashed #ff9800; border-radius: 10px; background: #fff5e6;">
+                    <div style="text-align:center; padding: 25px; border: 2px dashed #ff9800; border-radius: 10px; background: #fff5e6; color: #333;">
                         <p style="font-size: 1.2rem;">🔋 <strong>Modo de Economia</strong></p>
                         <p>A câmera foi desligada para poupar bateria.</p>
                         <button onclick="window.location.reload()" style="background:#27ae60; color:white; border:none; padding:12px 25px; border-radius:5px; cursor:pointer; font-weight:bold;">🔄 LIGAR CÂMERA</button>
                     </div>
                 `;
-                console.log("Scanner desligado por inatividade.");
-            });
+            }).catch(e => console.log("Erro ao limpar scanner:", e));
         }
-    }, 180000); 
+    }, tempoInatividadeMS); 
 }
 
-// --- SCANNER SIMPLIFICADO ---
+function carregarConfiguracoesSalvas() {
+    const fpsSalvo = localStorage.getItem("scannerFPS");
+    const inatividadeSalva = localStorage.getItem("scannerInatividade");
+
+    // Se houver algo salvo, aplica nos campos do HTML antes de iniciar o scanner
+    if (fpsSalvo) {
+        document.getElementById("setFPS").value = fpsSalvo;
+    }
+    if (inatividadeSalva) {
+        document.getElementById("setInatividade").value = inatividadeSalva;
+    }
+}
+
+// --- SCANNER PRINCIPAL ---
 function iniciarScanner() {
+    // Busca FPS e Tempo de Inatividade direto dos elementos do HTML
+    const fpsDesejado = parseInt(document.getElementById("setFPS").value) || 25;
+    tempoInatividadeMS = parseInt(document.getElementById("setInatividade").value);
+
+    // Limpa scanner anterior se existir para evitar travamento de câmera
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(e => console.log("Limpando..."));
+    }
+
+    // Ajusta o tamanho da caixa de leitura baseado na potência
+    let boxSize = 250;
+    if (fpsDesejado >= 25) boxSize = 280;
+    if (fpsDesejado >= 35) boxSize = 300;
+
     const config = { 
-        fps: 25, 
-        qrbox: { width: 280, height: 280 }, 
+        fps: fpsDesejado, 
+        qrbox: { width: boxSize, height: boxSize }, 
         aspectRatio: 1.0 
     };
     
     html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
-    
-    html5QrcodeScanner.render(async (texto) => {
-        // Se leu um QR Code, reseta o tempo de inatividade
-        resetarTimerInatividade();
+    html5QrcodeScanner.render(onScanSuccess);
 
-        const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            alert("⚠️ Este código já foi registrado pelo seu grupo!");
-            return;
-        }
-
-        const status = document.getElementById("statusEnvio");
-        status.style.display = "block";
-
-        try {
-            const novoDoc = {
-                link: texto,
-                data: new Date().toLocaleString('pt-BR'),
-                operador: operadorAtual,
-                grupo: grupoAtual,
-                timestamp: Date.now()
-            };
-
-            await addDoc(collection(db, "scans"), novoDoc);
-            listaEscaneamentos.unshift(novoDoc);
-            atualizarTabela();
-            alert("✅ Registro salvo com sucesso!");
-        } catch (e) {
-            alert("Erro ao salvar no banco: " + e.message);
-        } finally {
-            status.style.display = "none";
-        }
-    });
-
-    // Inicia o cronômetro assim que o scanner abre
     resetarTimerInatividade();
 }
+
+async function onScanSuccess(texto) {
+    resetarTimerInatividade(); // Se leu, reseta o tempo de desligamento
+
+    const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+        alert("⚠️ Este código já foi registrado pelo seu grupo!");
+        return;
+    }
+
+    const status = document.getElementById("statusEnvio");
+    status.style.display = "block";
+
+    try {
+        const novoDoc = {
+            link: texto,
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            timestamp: Date.now()
+        };
+
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+        alert("✅ Registro salvo com sucesso!");
+    } catch (e) {
+        alert("Erro ao salvar no banco: " + e.message);
+    } finally {
+        status.style.display = "none";
+    }
+}
+
+// --- CONFIGURAÇÕES E INTERFACE ---
+
+window.toggleConfig = () => {
+    const p = document.getElementById("painelAjustes");
+    p.style.display = p.style.display === "none" ? "block" : "none";
+};
+
+window.salvarPreferencias = () => {
+    const fps = document.getElementById("setFPS").value;
+    const inatividade = document.getElementById("setInatividade").value;
+
+    // Salva na memória do navegador (localStorage)
+    localStorage.setItem("scannerFPS", fps);
+    localStorage.setItem("scannerInatividade", inatividade);
+
+    document.getElementById("painelAjustes").style.display = "none";
+    iniciarScanner();
+    alert("⚙️ Configurações salvas permanentemente!");
+};
+
+window.toggleDarkMode = () => {
+    document.body.classList.toggle("dark-mode");
+    const isDark = document.body.classList.contains("dark-mode");
+    localStorage.setItem("modoEscuro", isDark);
+};
+
+// Carregar modo escuro ao abrir
+if (localStorage.getItem("modoEscuro") === "true") {
+    document.body.classList.add("dark-mode");
+}
+
+// --- HISTÓRICO E TABELA ---
 
 async function carregarHistorico() {
     const q = query(
@@ -131,7 +193,6 @@ async function carregarHistorico() {
         where("grupo", "==", grupoAtual), 
         orderBy("timestamp", "desc")
     );
-    
     const snap = await getDocs(q);
     listaEscaneamentos = snap.docs.map(d => d.data());
     atualizarTabela();
@@ -145,10 +206,7 @@ function atualizarTabela() {
             <td style="word-break:break-all"><strong>${item.link}</strong></td>
             <td>${item.data}</td>
             <td>${item.operador} (${item.grupo})</td> 
-            <td><span style="color: gray;">Sem foto</span></td>
-            <td>
-                <button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button>
-            </td>
+            <td><button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button></td>
         </tr>
     `).join('');
 }
@@ -167,20 +225,3 @@ window.verDetalhes = (id) => {
     const scan = listaEscaneamentos.find(s => s.timestamp == id);
     alert(`Detalhes do Registro:\n\nQR: ${scan.link}\nData: ${scan.data}\nResponsável: ${scan.operador}`);
 };
-// Abrir/Fechar painel
-window.toggleConfig = () => {
-    const p = document.getElementById("painelAjustes");
-    p.style.display = p.style.display === "none" ? "block" : "none";
-};
-
-// Alternar Modo Escuro
-window.toggleDarkMode = () => {
-    document.body.classList.toggle("dark-mode");
-    const isDark = document.body.classList.contains("dark-mode");
-    localStorage.setItem("modoEscuro", isDark); // Salva a escolha no celular
-};
-
-// Carregar modo escuro ao abrir o app
-if (localStorage.getItem("modoEscuro") === "true") {
-    document.body.classList.add("dark-mode");
-}

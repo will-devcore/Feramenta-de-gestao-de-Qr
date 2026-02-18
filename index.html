@@ -18,72 +18,68 @@
 
     <div id="conteudoApp" style="display: none;">
         <header>
-            <div style="text-align: right; padding: 10px;">
-            <button onclick="toggleConfig()" class="btn-acao">⚙️ Configurações</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #2c3e50; color: white;">
+                <div class="header-info">
+                    <h1 style="margin: 0; font-size: 1.1rem;">Sistema QR Master</h1>
+                    <p id="infoUsuario" style="margin: 0; font-size: 0.75rem; opacity: 0.8;">Carregando...</p>
+                </div>
+                <button onclick="toggleConfig()" class="btn-acao">⚙️ Ajustes</button>
             </div>
 
-            <div id="painelAjustes" style="display:none; background: #f9f9f9; padding: 15px; border-bottom: 2px solid #ddd;">
-                <h3>Ajustes do Scanner</h3>
-                    
-                <label>Potência (FPS):</label>
-                <select id="setFPS">
-                    <option value="15">Normal (15 FPS)</option>
-                    <option value="25">Puxado (25 FPS)</option>
-                    <option value="35">MEGA FOGO (35 FPS)</option>
-                </select>
-
-                <br><br>
-
-                <label>Inatividade:</label>
-                <select id="setInatividade">
+            <div id="painelAjustes" style="display:none; background: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; color: #333; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);">
+                <h3 style="margin-top: 0;">⚙️ Configurações</h3>
+                
+                <label><strong>Tempo de Inatividade:</strong></label><br>
+                <select id="setInatividade" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
                     <option value="60000">1 Minuto</option>
                     <option value="180000" selected>3 Minutos</option>
                     <option value="300000">5 Minutos</option>
                     <option value="0">Nunca desligar</option>
                 </select>
 
-                <br><br>
-
-                <button onclick="toggleDarkMode()" class="btn-filtro">🌙 Alternar Modo Escuro</button>
-                <button onclick="salvarPreferencias()" class="btn-primario">Aplicar e Salvar</button>
+                <button onclick="toggleDarkMode()" class="btn-filtro" style="width: 100%; margin-bottom: 15px; padding: 12px;">🌙 Alternar Modo Escuro</button>
+                <button onclick="salvarPreferencias()" class="btn-primario" style="width: 100%; padding: 12px; margin-bottom: 15px;">💾 Salvar e Aplicar</button>
+                
+                <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
+                
+                <button onclick="fazerLogout()" class="btn-sair" style="width: 100%; padding: 12px; background: #c0392b; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">🚪 SAIR DO APLICATIVO</button>
             </div>
-            <div class="header-info">
-                <h1>Painel de Controle QR</h1>
-                <p id="infoUsuario">Operador: Carregando...</p>
-            </div>
-            <button onclick="fazerLogout()" class="btn-sair">Sair</button>
         </header>
 
         <main>
             <div id="statusEnvio" style="display:none; background: #27ae60; color: white; text-align: center; padding: 10px; font-weight: bold;">
-                💾 Salvando registro no banco de dados...
+                💾 Salvando registro...
             </div>
 
-            <div id="reader"></div>
+            <div style="margin-top: 15px; background: #333; color: white; padding: 10px; border-radius: 8px 8px 0 0; text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px;">
+                <label style="font-size: 0.8rem; font-weight: bold;">POTÊNCIA DO SCANNER:</label>
+                <select id="setFPS" onchange="salvarPreferencias()" style="background: #444; color: white; border: 1px solid #666; border-radius: 4px; padding: 5px 10px;">
+                    <option value="15">Normal (15 FPS)</option>
+                    <option value="25" selected>Puxado (25 FPS)</option>
+                    <option value="35">MEGA FOGO (35 FPS)</option>
+                </select>
+            </div>
 
-            <section class="controles">
-                <h3>Gerenciamento</h3>
-                <div class="filtros">
-                    <button onclick="carregarHistorico()" class="btn-filtro">🔄 Atualizar</button>
-                    <button onclick="exportarParaCSV()" class="btn-excel">📥 Baixar Relatório (Excel)</button>
-                </div>
+            <div id="reader" style="border: 2px solid #333; border-top: none; background: #000;"></div>
+
+            <section style="padding: 15px; display: flex; gap: 10px;">
+                <button onclick="carregarHistorico()" class="btn-filtro" style="flex: 1; padding: 12px;">🔄 Atualizar</button>
+                <button onclick="exportarParaCSV()" class="btn-excel" style="flex: 1; padding: 12px;">📥 Gerar Excel</button>
             </section>
 
-            <section class="historico">
-                <h3>Histórico de Leituras</h3>
-                <div class="tabela-container">
-                    <table>
+            <section style="padding: 10px;">
+                <h3 style="margin-bottom: 10px;">Histórico Recente</h3>
+                <div class="tabela-container" style="overflow-x: auto; background: white; border-radius: 5px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
                         <thead>
-                            <tr>
-                                <th>Código QR</th>
-                                <th>Data/Hora</th>
-                                <th>Operador (Grupo)</th>
-                                <th>Status</th>
-                                <th>Ação</th>
+                            <tr style="background: #eee;">
+                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Status</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">QR Code</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Data/Hora</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Ação</th>
                             </tr>
                         </thead>
-                        <tbody id="corpoTabela">
-                            </tbody>
+                        <tbody id="corpoTabela"></tbody>
                     </table>
                 </div>
             </section>
