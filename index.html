@@ -26,32 +26,35 @@
         </header>
 
         <main>
-            <div id="statusEnvio" style="display:none; background: #f39c12; color: white; text-align: center; padding: 10px; font-weight: bold;">
-                📸 Processando foto e salvando no banco...
+            <div id="statusEnvio" style="display:none; background: #27ae60; color: white; text-align: center; padding: 10px; font-weight: bold;">
+                💾 Salvando registro no banco de dados...
             </div>
 
             <div id="reader"></div>
 
             <section class="controles">
-                <h3>Exportação e Filtros</h3>
+                <h3>Gerenciamento</h3>
                 <div class="filtros">
-                    <button onclick="filtrar('hoje')" class="btn-filtro">Hoje</button>
-                    <button onclick="exportarParaCSV()" class="btn-excel">Exportar Master (Excel)</button>
+                    <button onclick="carregarHistorico()" class="btn-filtro">🔄 Atualizar</button>
+                    <button onclick="exportarParaCSV()" class="btn-excel">📥 Baixar Relatório (Excel)</button>
                 </div>
             </section>
 
             <section class="historico">
-                <h3>Histórico do Grupo</h3>
+                <h3>Histórico de Leituras</h3>
                 <div class="tabela-container">
                     <table>
                         <thead>
                             <tr>
-                                <th>QR Code (Link)</th>
+                                <th>Código QR</th>
                                 <th>Data/Hora</th>
-                                <th>Operador (Grupo)</th> <th>Evidência</th>
-                                <th>Ação</th> </tr>
+                                <th>Operador (Grupo)</th>
+                                <th>Status</th>
+                                <th>Ação</th>
+                            </tr>
                         </thead>
-                        <tbody id="corpoTabela"></tbody>
+                        <tbody id="corpoTabela">
+                            </tbody>
                     </table>
                 </div>
             </section>
