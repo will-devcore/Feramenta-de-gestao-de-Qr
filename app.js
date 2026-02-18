@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Configuração corrigida (Sem os links de busca do Google)
 const firebaseConfig = {
     apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
     authDomain: "sistema-qr-master.firebaseapp.com",
@@ -19,12 +18,13 @@ const auth = getAuth(app);
 let operadorAtual = "";
 let grupoAtual = "";
 let listaEscaneamentos = [];
+let html5QrcodeScanner; // Variável global para gerenciar o scanner
+let timerEscalonamento; // Variável para o controle de tempo
 
 // --- LOGIN ---
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
-    // O erro de rede deve sumir agora com o authDomain corrigido
     signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro ao entrar: " + e.message));
 };
 
@@ -45,7 +45,7 @@ onAuthStateChanged(auth, async (user) => {
             document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
             document.getElementById("telaLogin").style.display = "none";
             document.getElementById("conteudoApp").style.display = "block";
-            iniciarScanner();
+            iniciarScanner(10, 250, "Básico"); // Começa no modo econômico
             carregarHistorico();
         }
     } else {
@@ -54,54 +54,91 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- SCANNER SIMPLIFICADO (SEM FOTO) ---
-function iniciarScanner() {
-    // Configurações para aumentar a sensibilidade
+// --- LÓGICA DO SCANNER INTELIGENTE ---
+function iniciarScanner(fps, tamanho, nivel) {
+    // Se já existir um scanner, limpa ele antes de reiniciar
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(err => console.error("Erro ao limpar scanner:", err));
+    }
+
+    console.log(`Modo: ${nivel} | FPS: ${fps} | Tamanho: ${tamanho}`);
+    
+    // Atualiza o status visual para o operador (opcional, mostra no console)
+    const statusEnvio = document.getElementById("statusEnvio");
+    if(nivel !== "Básico") {
+        statusEnvio.innerText = `🔍 Dificuldade detectada: Ativando modo ${nivel}...`;
+        statusEnvio.style.display = "block";
+        setTimeout(() => { if(statusEnvio.innerText.includes("Dificuldade")) statusEnvio.style.display = "none"; }, 2000);
+    }
+
     const config = { 
-        fps: 20, // Aumentamos de 10 para 20 para ler mais rápido
-        qrbox: { width: 280, height: 280 }, // Área de foco maior
+        fps: fps, 
+        qrbox: { width: tamanho, height: tamanho }, 
         aspectRatio: 1.0 
     };
+
+    html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
     
-    const scanner = new Html5QrcodeScanner("reader", config, false);
-    
-    scanner.render(async (texto) => {
-        // Trava de Duplicados por Grupo
-        const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            alert("⚠️ Este código já foi registrado pelo seu grupo!");
-            return;
-        }
+    html5QrcodeScanner.render(onScanSuccess);
 
-        const status = document.getElementById("statusEnvio");
-        status.style.display = "block";
+    // Gerencia o escalonamento automático de tempo
+    if (timerEscalonamento) clearTimeout(timerEscalonamento);
 
-        try {
-            // Salva apenas os dados de texto no Firestore
-            const novoDoc = {
-                link: texto,
-                data: new Date().toLocaleString('pt-BR'),
-                operador: operadorAtual,
-                grupo: grupoAtual,
-                timestamp: Date.now()
-            };
-
-            await addDoc(collection(db, "scans"), novoDoc);
-            listaEscaneamentos.unshift(novoDoc);
-            atualizarTabela();
-            alert("✅ Registro salvo com sucesso!");
-        } catch (e) {
-            alert("Erro ao salvar no banco: " + e.message);
-        } finally {
-            status.style.display = "none";
-        }
-    });
+    if (nivel === "Básico") {
+        timerEscalonamento = setTimeout(() => {
+            iniciarScanner(15, 260, "Médio");
+        }, 6000); // Se não ler em 6 segundos, vai pro Médio
+    } else if (nivel === "Médio") {
+        timerEscalonamento = setTimeout(() => {
+            iniciarScanner(25, 280, "Ultra Fogo");
+        }, 7000); // Se passar mais 7 segundos, vai pro Ultra
+    }
 }
 
+async function onScanSuccess(texto) {
+    if (timerEscalonamento) clearTimeout(timerEscalonamento); // Para o timer se leu!
+
+    // Trava de Duplicados por Grupo
+    const q = query(collection(db, "scans"), where("link", "==", texto), where("grupo", "==", grupoAtual));
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+        alert("⚠️ Este código já foi registrado pelo seu grupo!");
+        // Reinicia no básico após o alerta
+        iniciarScanner(10, 250, "Básico");
+        return;
+    }
+
+    const status = document.getElementById("statusEnvio");
+    status.innerText = "💾 Salvando registro no banco...";
+    status.style.display = "block";
+
+    try {
+        const novoDoc = {
+            link: texto,
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            timestamp: Date.now()
+        };
+
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+        alert("✅ Registro salvo com sucesso!");
+        
+        // Após o sucesso, sempre volta para o modo Básico para economizar bateria
+        iniciarScanner(10, 250, "Básico");
+
+    } catch (e) {
+        alert("Erro ao salvar no banco: " + e.message);
+    } finally {
+        status.style.display = "none";
+    }
+}
+
+// --- HISTÓRICO E TABELA ---
 async function carregarHistorico() {
-    // Busca no banco 'scans' filtrando pelo seu grupo, do mais novo para o mais antigo
     const q = query(
         collection(db, "scans"), 
         where("grupo", "==", grupoAtual), 
