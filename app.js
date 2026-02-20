@@ -23,7 +23,6 @@ let processandoBipe = false;
 let listaEscaneamentos = [];
 let videoTrack = null;
 let lanternaLigada = false;
-let timerInatividade = null;
 
 // --- MOTOR DE SCANNER (jsQR) ---
 function tick() {
@@ -35,6 +34,8 @@ function tick() {
         canvas.width = video.videoWidth;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Motor jsQR para ler os códigos amassados das suas fotos
         const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
         if (code && !processandoBipe) {
@@ -61,28 +62,33 @@ async function iniciarScanner() {
 
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
+    const telaLogin = document.getElementById("telaLogin");
+    const conteudoApp = document.getElementById("conteudoApp");
+
     if (user) {
-        const userDoc = await getDoc(doc(db, "usuarios", user.uid));
-        if (userDoc.exists()) {
-            const dados = userDoc.data();
-            operadorAtual = dados.nome;
-            grupoAtual = dados.grupo;
-            isAdmin = dados.cargo === "admin"; 
-            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-            document.getElementById("telaLogin").style.display = "none";
-            document.getElementById("conteudoApp").style.display = "block";
-            if (isAdmin) carregarGruposDinamicos();
-            iniciarScanner();
-            carregarHistorico();
-            resetarTimerInatividade();
-        }
+        try {
+            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+            if (userDoc.exists()) {
+                const dados = userDoc.data();
+                operadorAtual = dados.nome;
+                grupoAtual = dados.grupo;
+                isAdmin = dados.cargo === "admin"; 
+                
+                document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+                if (telaLogin) telaLogin.style.display = "none";
+                if (conteudoApp) conteudoApp.style.display = "block";
+                
+                iniciarScanner();
+                carregarHistorico();
+            }
+        } catch (e) { console.error("Erro no login:", e); }
     } else {
-        document.getElementById("telaLogin").style.display = "block";
-        document.getElementById("conteudoApp").style.display = "none";
+        if (telaLogin) telaLogin.style.display = "block";
+        if (conteudoApp) conteudoApp.style.display = "none";
     }
 });
 
-// --- FUNÇÕES DE INTERFACE (WINDOW) ---
+// Funções para o HTML encontrar (window)
 window.fazerLogin = () => {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
@@ -96,50 +102,34 @@ window.toggleLanterna = async () => {
     try {
         lanternaLigada = !lanternaLigada;
         await videoTrack.applyConstraints({ advanced: [{ torch: lanternaLigada }] });
-        document.getElementById("btnLanterna").innerText = lanternaLigada ? "❌ DESLIGAR LUZ" : "🔦 LIGAR LANTERNA";
-    } catch (e) { alert("Lanterna não suportada"); }
+        const btn = document.getElementById("btnLanterna");
+        if(btn) btn.innerText = lanternaLigada ? "❌ DESLIGAR LUZ" : "🔦 LIGAR LANTERNA";
+    } catch (e) { alert("Sua câmera não suporta lanterna via navegador."); }
 };
 
 window.toggleConfig = () => {
     const p = document.getElementById("painelAjustes");
-    p.style.display = p.style.display === "none" ? "block" : "none";
+    if(p) p.style.display = p.style.display === "none" ? "block" : "none";
 };
 
-window.toggleDarkMode = () => {
-    document.body.classList.toggle("dark-mode");
-    localStorage.setItem("modoEscuro", document.body.classList.contains("dark-mode"));
-};
-
-window.salvarPreferencias = () => {
-    const novoNome = document.getElementById("nomeOperadorTroca").value;
-    if (novoNome) operadorAtual = novoNome;
-    localStorage.setItem("tempoInatividade", document.getElementById("setInatividade").value);
-    alert("Configurações salvas!");
-    toggleConfig();
-};
-
-window.exportarParaCSV = () => {
-    let csv = "Link;Data;Operador;Grupo\n";
-    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
-    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Relatorio_${new Date().toLocaleDateString()}.csv`;
-    link.click();
-};
-
-// --- LOGICA DE NEGOCIO ---
+// --- SALVAR NO BANCO ---
 async function onScanSuccess(texto) {
     if (processandoBipe) return;
     processandoBipe = true;
-    resetarTimerInatividade();
+
     try {
         const q = query(collection(db, "scans"), where("link", "==", texto.trim()), where("grupo", "==", grupoAtual));
         const snap = await getDocs(q);
         if (!snap.empty) {
             alert("⚠️ Já registrado!");
         } else {
-            const novoDoc = { link: texto.trim(), data: new Date().toLocaleString('pt-BR'), operador: operadorAtual, grupo: grupoAtual, timestamp: Date.now() };
+            const novoDoc = { 
+                link: texto.trim(), 
+                data: new Date().toLocaleString('pt-BR'), 
+                operador: operadorAtual, 
+                grupo: grupoAtual, 
+                timestamp: Date.now() 
+            };
             await addDoc(collection(db, "scans"), novoDoc);
             listaEscaneamentos.unshift(novoDoc);
             atualizarTabela();
@@ -154,10 +144,10 @@ function atualizarTabela() {
     corpo.innerHTML = listaEscaneamentos.map(item => `
         <tr>
             <td>✅</td>
-            <td style="word-break:break-all">${item.link}</td>
+            <td style="word-break:break-all"><strong>${item.link}</strong></td>
             <td>${item.data}</td>
             <td>${item.operador}</td>
-            <td><button onclick="alert('${item.link}')">ℹ️</button></td>
+            <td><button class="btn-acao">ℹ️</button></td>
         </tr>
     `).join('');
 }
@@ -168,12 +158,3 @@ async function carregarHistorico() {
     listaEscaneamentos = snap.docs.map(d => d.data());
     atualizarTabela();
 }
-
-function resetarTimerInatividade() {
-    if (timerInatividade) clearTimeout(timerInatividade);
-    const tempo = parseInt(localStorage.getItem("tempoInatividade")) || 180000;
-    if (tempo === 0) return;
-    timerInatividade = setTimeout(() => { location.reload(); }, tempo);
-}
-
-if (localStorage.getItem("modoEscuro") === "true") document.body.classList.add("dark-mode");
