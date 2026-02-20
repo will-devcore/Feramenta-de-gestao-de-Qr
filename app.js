@@ -116,15 +116,20 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 // --- SCANNER E LOGICA DE BIPES ---
 
 function iniciarScanner() {
-    const fpsDesejado = parseInt(document.getElementById("setFPS").value) || 25;
-    tempoInatividadeMS = parseInt(document.getElementById("setInatividade").value);
-    if (html5QrcodeScanner) { html5QrcodeScanner.clear().catch(e => {}); }
-    let boxSize = 250;
-    if (fpsDesejado >= 35) boxSize = 300;
-    const config = { fps: fpsDesejado, qrbox: { width: boxSize, height: boxSize }, aspectRatio: 1.0 };
+    // Configuramos para pedir a câmera traseira com resolução HD
+    const config = { 
+        fps: 30, // Aumentamos para 30 frames por segundo
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        videoConstraints: {
+            facingMode: "environment",
+            width: { ideal: 1280 }, // Força alta definição
+            height: { ideal: 720 }
+        }
+    };
+
     html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
     html5QrcodeScanner.render(onScanSuccess);
-    resetarTimerInatividade();
 }
 
 async function onScanSuccess(texto) {
