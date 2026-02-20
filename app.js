@@ -16,6 +16,7 @@ const codeReader = new ZXing.BrowserQRCodeReader(); // Agora ele usa o objeto gl
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const video = document.getElementById("reader");
 
 // --- VARIÁVEIS GLOBAIS ---
 let operadorAtual = "";
@@ -25,7 +26,9 @@ let processandoBipe = false;
 let listaEscaneamentos = [];
 let html5QrcodeScanner = null; 
 let timerInatividade = null; 
-let tempoInatividadeMS = 180000; 
+let tempoInatividadeMS = 180000;
+let videoTrack = null;
+let lanternaLigada = false;
 
 // --- FUNÇÕES DE APOIO (GRUPOS E OPERADORES) ---
 
@@ -120,56 +123,63 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 // --- NOVO MOTOR DE SCANNER (ZXing) ---
 async function iniciarScanner() {
     try {
-        // 1. Reseta o leitor antes de começar
-        codeReader.reset();
-        console.log("ZXing: Motor reiniciado.");
-
-        // 2. Busca os dispositivos de vídeo
-        const videoInputDevices = await codeReader.listVideoInputDevices();
-        
-        if (videoInputDevices.length === 0) {
-            alert("Nenhuma câmera encontrada.");
-            return;
-        }
-
-        // 3. Tenta encontrar especificamente a câmera traseira (environment)
-        // Se não encontrar pelo nome, pega a última da lista (geralmente a traseira)
-        let selectedDeviceId = videoInputDevices[0].deviceId;
-        
-        const cameraTraseira = videoInputDevices.find(device => 
-            device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('traseira') ||
-            device.label.toLowerCase().includes('environment')
-        );
-
-        if (cameraTraseira) {
-            selectedDeviceId = cameraTraseira.deviceId;
-        } else if (videoInputDevices.length > 1) {
-            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
-        }
-
-        console.log("Iniciando na câmera:", selectedDeviceId);
-
-        // 4. Inicia a decodificação contínua
-        // O primeiro parâmetro 'reader' deve ser o ID da tag <video> no HTML
-        await codeReader.decodeFromVideoDevice(selectedDeviceId, 'reader', (result, err) => {
-            if (result) {
-                console.log("Código lido:", result.text);
-                onScanSuccess(result.text); 
-            }
-            // Ignoramos erros de 'NotFoundException' para não sujar o console
-            if (err && !(err.name === 'NotFoundException')) {
-                // Se for um erro real (permissão, etc), mostramos
-                if (err.name !== 'TypeError') console.error("Erro ZXing:", err);
-            }
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: "environment", 
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 } 
+            } 
         });
-
+        
+        video.srcObject = stream;
+        videoTrack = stream.getVideoTracks()[0];
+        video.setAttribute("playsinline", true);
+        video.play();
+        
+        requestAnimationFrame(tick);
     } catch (e) {
-        console.error("Falha crítica no Scanner:", e);
-        alert("Erro ao acessar câmera: " + e.message);
+        alert("Erro na câmera: " + e.message);
     }
 }
 
+function tick() {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // Criamos um canvas temporário para processar a imagem
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // MOTOR jsQR: Tenta ler o código no frame atual
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+        });
+
+        if (code && !processandoBipe) {
+            onScanSuccess(code.data); // Sua função de salvar no Firebase
+        }
+    }
+    requestAnimationFrame(tick);
+}
+
+// Função da Lanterna para Android e iPhone
+async function toggleLanterna() {
+    if (!videoTrack) return;
+    try {
+        lanternaLigada = !lanternaLigada;
+        await videoTrack.applyConstraints({
+            advanced: [{ torch: lanternaLigada }]
+        });
+        const btn = document.getElementById("btnLanterna");
+        btn.innerText = lanternaLigada ? "❌ DESLIGAR LUZ" : "🔦 LIGAR LANTERNA";
+        btn.style.background = lanternaLigada ? "#e74c3c" : "#f1c40f";
+    } catch (err) {
+        console.error("Lanterna não disponível", err);
+    }
+}
 async function onScanSuccess(texto) {
     if (processandoBipe) return;
     processandoBipe = true;
