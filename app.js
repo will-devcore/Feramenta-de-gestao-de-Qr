@@ -120,3 +120,63 @@ async function carregarGruposDinamicos() {
         selectGrupo.disabled = false;
     } catch (e) { console.error("Erro ao carregar grupos:", e); }
 }
+
+// --- LOGICA DE SALVAMENTO (BIPE E MANUAL) ---
+async function onScanSuccess(texto) {
+    if (processandoBipe) return;
+    processandoBipe = true; // Ativa a trava para não salvar 2x
+
+    const status = document.getElementById("statusEnvio");
+    if (status) status.style.display = "block";
+
+    try {
+        // Verifica se o QR já existe no banco para o seu grupo
+        const q = query(collection(db, "scans"), where("link", "==", texto.trim()), where("grupo", "==", grupoAtual));
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            alert("⚠️ Este código já foi registrado pelo seu grupo!");
+        } else {
+            // Se for novo, salva no Firebase
+            const novoDoc = {
+                link: texto.trim(),
+                data: new Date().toLocaleString('pt-BR'),
+                operador: operadorAtual,
+                grupo: grupoAtual,
+                timestamp: Date.now()
+            };
+
+            await addDoc(collection(db, "scans"), novoDoc);
+            listaEscaneamentos.unshift(novoDoc); // Adiciona no topo da lista local
+            atualizarTabela();
+            console.log("✅ Salvo com sucesso!");
+        }
+    } catch (e) {
+        alert("Erro ao salvar: " + e.message);
+    } finally {
+        if (status) status.style.display = "none";
+        // Aguarda 2 segundos antes de permitir outro bipe
+        setTimeout(() => { processandoBipe = false; }, 2000);
+    }
+}
+
+// --- ATUALIZAR A TABELA NA TELA ---
+function atualizarTabela() {
+    const corpo = document.getElementById("corpoTabela");
+    if (!corpo) return;
+
+    if (listaEscaneamentos.length === 0) {
+        corpo.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+        return;
+    }
+
+    corpo.innerHTML = listaEscaneamentos.map(item => `
+        <tr>
+            <td><span style="color: #27ae60; font-weight: bold;">✅ Ok</span></td>
+            <td style="word-break:break-all; font-size: 0.8rem;"><strong>${item.link}</strong></td>
+            <td style="white-space: nowrap;">${item.data}</td>
+            <td>${item.operador}</td> 
+            <td><button onclick="alert('${item.link}')" style="border:none; background:none; cursor:pointer;">ℹ️</button></td>
+        </tr>
+    `).join('');
+}
