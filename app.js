@@ -24,7 +24,6 @@ let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
-let html5QrcodeScanner = null; 
 let timerInatividade = null; 
 let tempoInatividadeMS = 180000;
 let videoTrack = null;
