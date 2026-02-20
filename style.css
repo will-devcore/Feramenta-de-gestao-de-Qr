@@ -100,3 +100,8 @@ body.dark-mode #painelAjustes {
 }
 body.dark-mode input, body.dark-mode select { background-color: #333; color: white; border-color: #555; }
 body.dark-mode table { background-color: #252525; color: #eee; }
+#reader {
+    width: 100%;
+    object-fit: cover; /* Garante que o vídeo preencha o espaço sem distorcer */
+    min-height: 300px;
+}
