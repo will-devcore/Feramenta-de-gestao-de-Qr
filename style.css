@@ -105,3 +105,14 @@ body.dark-mode table { background-color: #252525; color: #eee; }
     object-fit: cover; /* Garante que o vídeo preencha o espaço sem distorcer */
     min-height: 300px;
 }
+/* Adicione isso ao seu arquivo CSS para a linha de animação aparecer */
+.scanner-line {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 2px;
+    background: red; box-shadow: 0 0 8px red;
+    animation: scan 2s infinite linear;
+}
+@keyframes scan {
+    0% { top: 10%; }
+    100% { top: 90%; }
+}
