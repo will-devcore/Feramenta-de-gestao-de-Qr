@@ -36,72 +36,83 @@ onAuthStateChanged(auth, async (user) => {
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
 
-                // 1. Atualiza interface básica
+                // 1. Atualiza a interface IMEDIATAMENTE
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
                 document.getElementById("telaLogin").style.display = "none";
                 document.getElementById("conteudoApp").style.display = "block";
                 
-                // 2. Carrega dados primeiro (Independente da câmera)
-                console.log("Carregando dados do Firebase...");
+                // 2. Carrega os dados do Firebase ANTES da câmera
+                console.log("Sincronizando dados...");
                 await carregarHistorico();
-                await carregarGruposDinamicos(); // Garante que grupos apareçam
-                await window.carregarOperadoresDoGrupo(); // Garante que operadores apareçam
+                await carregarGruposDinamicos(); 
+                await window.carregarOperadoresDoGrupo();
 
-                // 3. Só depois tenta a câmera (Se falhar, os dados já estão na tela)
+                // 3. SOLUÇÃO PARA CÂMERA PRETA: 
+                // Aguarda 1.5 segundos para garantir que a interface montou e as permissões estão prontas
                 setTimeout(() => {
-                    iniciarScanner().catch(err => {
-                        console.warn("Câmera não iniciada, mas dados carregados.", err);
-                    });
-                }, 1000); 
+                    iniciarScanner();
+                }, 1500); 
             }
-        } catch (e) { console.error("Erro no fluxo de login:", e); }
+        } catch (e) { console.error("Erro no login:", e); }
     } else {
         document.getElementById("telaLogin").style.display = "block";
         document.getElementById("conteudoApp").style.display = "none";
     }
 });
 
-// --- MOTOR SCANNER (REVISADO PARA CELULAR) ---
+// --- MOTOR SCANNER COM TRATAMENTO DE ERRO ---
 async function iniciarScanner() {
     try {
-        codeReader.reset();
+        // Reseta qualquer tentativa anterior travada
+        await codeReader.reset();
+        
         const devices = await codeReader.listVideoInputDevices();
-        if (devices.length === 0) return;
+        if (devices.length === 0) {
+            console.warn("Nenhuma câmera encontrada.");
+            return;
+        }
 
-        // No celular, sempre tentamos a ÚLTIMA câmera (Traseira)
+        // Seleciona a câmera traseira
         const selectedId = devices[devices.length - 1].deviceId;
         
-        // Configuração para forçar foco e resolução no celular
+        // Configurações para forçar o navegador a "acordar" a câmera
         const constraints = { 
             video: { 
-                deviceId: { exact: selectedId },
-                facingMode: "environment"
+                deviceId: { ideal: selectedId },
+                facingMode: "environment",
+                width: { ideal: 1280 }
             } 
         };
 
+        // Solicita o stream explicitamente
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         const videoElement = document.getElementById('reader');
-        videoElement.srcObject = stream;
-        videoTrack = stream.getVideoTracks()[0];
-
-        codeReader.decodeFromVideoElement(videoElement, (result, err) => {
-            if (result && !processandoBipe) {
-                onScanSuccess(result.text); 
-            }
-        });
+        
+        if (videoElement) {
+            videoElement.srcObject = stream;
+            videoTrack = stream.getVideoTracks()[0];
+            
+            // Inicia a leitura do ZXing no elemento de vídeo
+            codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+                if (result && !processandoBipe) {
+                    onScanSuccess(result.text); 
+                }
+            });
+        }
     } catch (e) {
-        console.error("Erro ao acessar câmera no celular:", e);
-        // Não damos alert aqui para não travar a experiência do usuário
+        console.error("Falha ao iniciar câmera:", e);
+        // Se der erro de câmera, os grupos e operadores CONTINUAM funcionando
     }
 }
 
-// --- CORREÇÃO DOS GRUPOS (PARA NÃO SUMIREM) ---
+// --- FUNÇÃO PARA GARANTIR OS GRUPOS (PARA ADMIN E OPERADOR) ---
 async function carregarGruposDinamicos() {
     const selectGrupo = document.getElementById("filtroGrupo");
     if (!selectGrupo) return;
 
     try {
         if (!isAdmin) {
+            // Se não for admin, trava no grupo dele
             selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
             selectGrupo.disabled = true;
             return;
@@ -118,46 +129,7 @@ async function carregarGruposDinamicos() {
         gruposSet.forEach(g => { opcoes += `<option value="${g}">${g}</option>`; });
         selectGrupo.innerHTML = opcoes;
         selectGrupo.disabled = false;
-    } catch (e) { console.error("Erro ao carregar grupos:", e); }
-}
-
-// --- LOGICA DE SALVAMENTO (BIPE E MANUAL) ---
-async function onScanSuccess(texto) {
-    if (processandoBipe) return;
-    processandoBipe = true; // Ativa a trava para não salvar 2x
-
-    const status = document.getElementById("statusEnvio");
-    if (status) status.style.display = "block";
-
-    try {
-        // Verifica se o QR já existe no banco para o seu grupo
-        const q = query(collection(db, "scans"), where("link", "==", texto.trim()), where("grupo", "==", grupoAtual));
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            alert("⚠️ Este código já foi registrado pelo seu grupo!");
-        } else {
-            // Se for novo, salva no Firebase
-            const novoDoc = {
-                link: texto.trim(),
-                data: new Date().toLocaleString('pt-BR'),
-                operador: operadorAtual,
-                grupo: grupoAtual,
-                timestamp: Date.now()
-            };
-
-            await addDoc(collection(db, "scans"), novoDoc);
-            listaEscaneamentos.unshift(novoDoc); // Adiciona no topo da lista local
-            atualizarTabela();
-            console.log("✅ Salvo com sucesso!");
-        }
-    } catch (e) {
-        alert("Erro ao salvar: " + e.message);
-    } finally {
-        if (status) status.style.display = "none";
-        // Aguarda 2 segundos antes de permitir outro bipe
-        setTimeout(() => { processandoBipe = false; }, 2000);
-    }
+    } catch (e) { console.error("Erro nos grupos:", e); }
 }
 
 // --- ATUALIZAR A TABELA NA TELA ---
