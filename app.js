@@ -11,174 +11,112 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
-// Inicialização
+// ... (Mantenha seus imports e firebaseConfig no topo)
+
 const codeReader = new ZXing.BrowserQRCodeReader();
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// --- VARIÁVEIS GLOBAIS ---
 let operadorAtual = "";
 let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
-let videoTrack = null; // Para controlar a lanterna
-let lanternaLigada = false;
+let videoTrack = null;
 
-// --- MONITOR DE ACESSO (LOGIN) ---
+// --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
             const userDoc = await getDoc(doc(db, "usuarios", user.uid));
             if (userDoc.exists()) {
                 const dados = userDoc.data();
-                if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
-                
                 operadorAtual = dados.nome;
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
 
+                // 1. Atualiza interface básica
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-                
-                // Configuração de interface pós-login
                 document.getElementById("telaLogin").style.display = "none";
                 document.getElementById("conteudoApp").style.display = "block";
                 
-                iniciarScanner();
-                carregarHistorico();
+                // 2. Carrega dados primeiro (Independente da câmera)
+                console.log("Carregando dados do Firebase...");
+                await carregarHistorico();
+                await carregarGruposDinamicos(); // Garante que grupos apareçam
+                await window.carregarOperadoresDoGrupo(); // Garante que operadores apareçam
+
+                // 3. Só depois tenta a câmera (Se falhar, os dados já estão na tela)
+                setTimeout(() => {
+                    iniciarScanner().catch(err => {
+                        console.warn("Câmera não iniciada, mas dados carregados.", err);
+                    });
+                }, 1000); 
             }
-        } catch (e) { console.error("Erro no login:", e); }
+        } catch (e) { console.error("Erro no fluxo de login:", e); }
     } else {
         document.getElementById("telaLogin").style.display = "block";
         document.getElementById("conteudoApp").style.display = "none";
     }
 });
 
-// --- MOTOR ZXING COM SUPORTE A LANTERNA ---
+// --- MOTOR SCANNER (REVISADO PARA CELULAR) ---
 async function iniciarScanner() {
     try {
         codeReader.reset();
-        const videoInputDevices = await codeReader.listVideoInputDevices();
-        if (videoInputDevices.length === 0) return;
+        const devices = await codeReader.listVideoInputDevices();
+        if (devices.length === 0) return;
 
-        // Tenta pegar a câmera traseira
-        let selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+        // No celular, sempre tentamos a ÚLTIMA câmera (Traseira)
+        const selectedId = devices[devices.length - 1].deviceId;
         
-        // Inicia o stream para capturar o "Track" da lanterna
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { deviceId: selectedDeviceId, facingMode: "environment" } 
-        });
-        
-        // Atribui o stream ao elemento de vídeo e guarda o track para a lanterna
+        // Configuração para forçar foco e resolução no celular
+        const constraints = { 
+            video: { 
+                deviceId: { exact: selectedId },
+                facingMode: "environment"
+            } 
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         const videoElement = document.getElementById('reader');
         videoElement.srcObject = stream;
         videoTrack = stream.getVideoTracks()[0];
 
-        // Inicia decodificação do ZXing
         codeReader.decodeFromVideoElement(videoElement, (result, err) => {
             if (result && !processandoBipe) {
                 onScanSuccess(result.text); 
             }
         });
-
-    } catch (e) { console.error("Erro Scanner:", e); }
-}
-
-// --- FUNÇÃO DA LANTERNA ---
-window.toggleLanterna = async function() {
-    if (!videoTrack) return;
-    try {
-        const capabilities = videoTrack.getCapabilities();
-        if (!capabilities.torch) {
-            alert("Lanterna não disponível nesta câmera.");
-            return;
-        }
-        lanternaLigada = !lanternaLigada;
-        await videoTrack.applyConstraints({ advanced: [{ torch: lanternaLigada }] });
-        const btn = document.getElementById("btnLanterna");
-        btn.innerText = lanternaLigada ? "❌ DESLIGAR LUZ" : "🔦 LIGAR LANTERNA";
-        btn.style.background = lanternaLigada ? "#e74c3c" : "#f1c40f";
-    } catch (e) { console.error("Erro Lanterna:", e); }
-};
-
-// --- SAÍDA DE EMERGÊNCIA: ENVIO MANUAL ---
-window.enviarManual = async function() {
-    const input = document.getElementById("urlManual");
-    const texto = input.value.trim();
-    if (texto.length < 5) {
-        alert("Cole uma URL ou código válido.");
-        return;
+    } catch (e) {
+        console.error("Erro ao acessar câmera no celular:", e);
+        // Não damos alert aqui para não travar a experiência do usuário
     }
-    await onScanSuccess(texto);
-    input.value = ""; // Limpa o campo
-    alert("✅ Enviado com sucesso!");
-};
+}
 
-// --- LOGICA DE SALVAMENTO ---
-async function onScanSuccess(texto) {
-    if (processandoBipe) return;
-    processandoBipe = true;
+// --- CORREÇÃO DOS GRUPOS (PARA NÃO SUMIREM) ---
+async function carregarGruposDinamicos() {
+    const selectGrupo = document.getElementById("filtroGrupo");
+    if (!selectGrupo) return;
 
     try {
-        const q = query(collection(db, "scans"), where("link", "==", texto.trim()), where("grupo", "==", grupoAtual));
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            alert("⚠️ Já registrado!");
-            processandoBipe = false;
+        if (!isAdmin) {
+            selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
+            selectGrupo.disabled = true;
             return;
         }
 
-        const novoDoc = {
-            link: texto.trim(),
-            data: new Date().toLocaleString('pt-BR'),
-            operador: operadorAtual,
-            grupo: grupoAtual,
-            timestamp: Date.now()
-        };
+        const querySnapshot = await getDocs(collection(db, "usuarios"));
+        const gruposSet = new Set();
+        querySnapshot.forEach(doc => {
+            const d = doc.data();
+            if (d.grupo) gruposSet.add(d.grupo);
+        });
 
-        await addDoc(collection(db, "scans"), novoDoc);
-        listaEscaneamentos.unshift(novoDoc);
-        atualizarTabela();
-    } catch (e) { alert("Erro: " + e.message); }
-    
-    // Trava de 2 segundos para não duplicar bipe
-    setTimeout(() => { processandoBipe = false; }, 2000);
-}
-
-// --- FUNÇÕES DE INTERFACE ---
-window.fazerLogin = function() {
-    const email = document.getElementById("emailLogin").value;
-    const senha = document.getElementById("senhaLogin").value;
-    signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro: " + e.message));
-};
-
-window.fazerLogout = () => signOut(auth).then(() => location.reload());
-
-window.toggleConfig = () => {
-    const p = document.getElementById("painelAjustes");
-    p.style.display = p.style.display === "none" ? "block" : "none";
-};
-
-async function carregarHistorico() {
-    try {
-        const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
-        const snap = await getDocs(q);
-        listaEscaneamentos = snap.docs.map(d => d.data());
-        atualizarTabela();
-    } catch (e) { console.error(e); }
-}
-
-function atualizarTabela() {
-    const corpo = document.getElementById("corpoTabela");
-    if (!corpo) return;
-    corpo.innerHTML = listaEscaneamentos.map(item => `
-        <tr>
-            <td><span style="color: #27ae60;">✅ Ok</span></td>
-            <td style="word-break:break-all"><strong>${item.link}</strong></td>
-            <td>${item.data}</td>
-            <td>${item.operador}</td> 
-        </tr>
-    `).join('');
+        let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
+        gruposSet.forEach(g => { opcoes += `<option value="${g}">${g}</option>`; });
+        selectGrupo.innerHTML = opcoes;
+        selectGrupo.disabled = false;
+    } catch (e) { console.error("Erro ao carregar grupos:", e); }
 }
