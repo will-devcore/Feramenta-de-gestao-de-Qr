@@ -1,8 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-// Vamos usar a versão Browser que já vem pronta para câmeras
-import { BrowserQRCodeReader } from "https://cdn.skypack.dev/@zxing/library";
 
 const firebaseConfig = {
     apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
@@ -14,7 +12,7 @@ const firebaseConfig = {
 };
 
 // 3. Inicialize o leitor fora das funções para ele ficar sempre pronto
-const codeReader = new BrowserQRCodeReader();
+const codeReader = new ZXing.BrowserQRCodeReader(); // Agora ele usa o objeto global
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
