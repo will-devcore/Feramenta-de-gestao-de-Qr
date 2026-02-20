@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+// Vamos usar a versão Browser que já vem pronta para câmeras
+import { BrowserQRCodeReader } from "https://cdn.skypack.dev/@zxing/library";
 
 const firebaseConfig = {
     apiKey: "AIzaSyA-Un2ijd0Ao-sIeVFjq5lWU-0wBfwrEhk",
@@ -11,6 +13,8 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
+// 3. Inicialize o leitor fora das funções para ele ficar sempre pronto
+const codeReader = new BrowserQRCodeReader();
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -115,21 +119,57 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 
 // --- SCANNER E LOGICA DE BIPES ---
 
-function iniciarScanner() {
-    // Configuramos para pedir a câmera traseira com resolução HD
-    const config = { 
-        fps: 30, // Aumentamos para 30 frames por segundo
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-        videoConstraints: {
-            facingMode: "environment",
-            width: { ideal: 1280 }, // Força alta definição
-            height: { ideal: 720 }
-        }
-    };
+// --- NOVO MOTOR DE SCANNER (ZXing) ---
+async function iniciarScanner() {
+    try {
+        // 1. Reseta o leitor antes de começar
+        codeReader.reset();
+        console.log("ZXing: Motor reiniciado.");
 
-    html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
-    html5QrcodeScanner.render(onScanSuccess);
+        // 2. Busca os dispositivos de vídeo
+        const videoInputDevices = await codeReader.listVideoInputDevices();
+        
+        if (videoInputDevices.length === 0) {
+            alert("Nenhuma câmera encontrada.");
+            return;
+        }
+
+        // 3. Tenta encontrar especificamente a câmera traseira (environment)
+        // Se não encontrar pelo nome, pega a última da lista (geralmente a traseira)
+        let selectedDeviceId = videoInputDevices[0].deviceId;
+        
+        const cameraTraseira = videoInputDevices.find(device => 
+            device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('traseira') ||
+            device.label.toLowerCase().includes('environment')
+        );
+
+        if (cameraTraseira) {
+            selectedDeviceId = cameraTraseira.deviceId;
+        } else if (videoInputDevices.length > 1) {
+            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+        }
+
+        console.log("Iniciando na câmera:", selectedDeviceId);
+
+        // 4. Inicia a decodificação contínua
+        // O primeiro parâmetro 'reader' deve ser o ID da tag <video> no HTML
+        await codeReader.decodeFromVideoDevice(selectedDeviceId, 'reader', (result, err) => {
+            if (result) {
+                console.log("Código lido:", result.text);
+                onScanSuccess(result.text); 
+            }
+            // Ignoramos erros de 'NotFoundException' para não sujar o console
+            if (err && !(err.name === 'NotFoundException')) {
+                // Se for um erro real (permissão, etc), mostramos
+                if (err.name !== 'TypeError') console.error("Erro ZXing:", err);
+            }
+        });
+
+    } catch (e) {
+        console.error("Falha crítica no Scanner:", e);
+        alert("Erro ao acessar câmera: " + e.message);
+    }
 }
 
 async function onScanSuccess(texto) {
