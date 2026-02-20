@@ -11,6 +11,8 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
+// 3. Inicialize o leitor fora das funções para ele ficar sempre pronto
+const codeReader = new ZXing.BrowserQRCodeReader(); // Agora ele usa o objeto global
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -21,75 +23,91 @@ let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
-let videoTrack = null;
-let lanternaLigada = false;
+let html5QrcodeScanner = null; 
+let timerInatividade = null; 
+let tempoInatividadeMS = 180000; 
 
-// --- MOTOR DE SCANNER (jsQR) ---
-function tick() {
-    const video = document.getElementById("reader");
-    if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Motor jsQR para ler os códigos amassados das suas fotos
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+// --- FUNÇÕES DE APOIO (GRUPOS E OPERADORES) ---
 
-        if (code && !processandoBipe) {
-            onScanSuccess(code.data);
-        }
-    }
-    requestAnimationFrame(tick);
-}
-
-async function iniciarScanner() {
-    const video = document.getElementById("reader");
-    if (!video) return;
+async function carregarGruposDinamicos() {
+    const selectGrupo = document.getElementById("filtroGrupo");
+    if (!selectGrupo) return;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: { ideal: 1280 } } 
+        const querySnapshot = await getDocs(collection(db, "usuarios"));
+        const gruposSet = new Set();
+        querySnapshot.forEach(doc => {
+            const d = doc.data();
+            if (d.grupo) gruposSet.add(d.grupo);
         });
-        video.srcObject = stream;
-        videoTrack = stream.getVideoTracks()[0];
-        video.setAttribute("playsinline", true);
-        video.play();
-        requestAnimationFrame(tick);
-    } catch (e) { console.error("Erro câmera:", e); }
+        let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
+        gruposSet.forEach(g => { opcoes += `<option value="${g}">${g}</option>`; });
+        selectGrupo.innerHTML = opcoes;
+        selectGrupo.disabled = false;
+        selectGrupo.onchange = () => window.carregarOperadoresDoGrupo();
+    } catch (e) { console.error("Erro grupos:", e); }
 }
 
-// --- MONITOR DE ACESSO ---
-onAuthStateChanged(auth, async (user) => {
-    const telaLogin = document.getElementById("telaLogin");
-    const conteudoApp = document.getElementById("conteudoApp");
+window.carregarOperadoresDoGrupo = async function() {
+    const select = document.getElementById("filtroGrupo");
+    if (!select) return;
+    const grupoSelecionado = select.value;
+    const datalist = document.getElementById("listaOperadoresSugestao");
+    if (!datalist) return;
+    try {
+        let q = (grupoSelecionado === "todos") ? query(collection(db, "usuarios")) : query(collection(db, "usuarios"), where("grupo", "==", grupoSelecionado));
+        const snap = await getDocs(q);
+        let html = "";
+        snap.forEach(doc => { html += `<option value="${doc.data().nome}">`; });
+        datalist.innerHTML = html;
+    } catch (e) { console.error("Erro operadores:", e); }
+};
 
+// --- MONITOR DE ACESSO (LOGIN) ---
+
+onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
             const userDoc = await getDoc(doc(db, "usuarios", user.uid));
             if (userDoc.exists()) {
                 const dados = userDoc.data();
+                if (!dados.aprovado) { alert("Aguarde aprovação."); signOut(auth); return; }
+                
                 operadorAtual = dados.nome;
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
-                
+
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-                if (telaLogin) telaLogin.style.display = "none";
-                if (conteudoApp) conteudoApp.style.display = "block";
+                if(document.getElementById("nomeOperadorTroca")) {
+                    document.getElementById("nomeOperadorTroca").value = operadorAtual;
+                }
+
+                const selectGrupo = document.getElementById("filtroGrupo");
+                if (selectGrupo) {
+                    if (isAdmin) {
+                        await carregarGruposDinamicos();
+                    } else {
+                        selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
+                        selectGrupo.disabled = true;
+                    }
+                }
                 
+                await window.carregarOperadoresDoGrupo();
+
+                document.getElementById("telaLogin").style.display = "none";
+                document.getElementById("conteudoApp").style.display = "block";
+                
+                carregarConfiguracoesSalvas();
                 iniciarScanner();
                 carregarHistorico();
             }
         } catch (e) { console.error("Erro no login:", e); }
     } else {
-        if (telaLogin) telaLogin.style.display = "block";
-        if (conteudoApp) conteudoApp.style.display = "none";
+        document.getElementById("telaLogin").style.display = "block";
+        document.getElementById("conteudoApp").style.display = "none";
     }
 });
 
-// Funções para o HTML encontrar (window)
-window.fazerLogin = () => {
+window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
     const senha = document.getElementById("senhaLogin").value;
     signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro: " + e.message));
@@ -97,45 +115,115 @@ window.fazerLogin = () => {
 
 window.fazerLogout = () => signOut(auth).then(() => location.reload());
 
-window.toggleLanterna = async () => {
-    if (!videoTrack) return;
+// --- SCANNER E LOGICA DE BIPES ---
+
+// --- NOVO MOTOR DE SCANNER (ZXing) ---
+async function iniciarScanner() {
     try {
-        lanternaLigada = !lanternaLigada;
-        await videoTrack.applyConstraints({ advanced: [{ torch: lanternaLigada }] });
-        const btn = document.getElementById("btnLanterna");
-        if(btn) btn.innerText = lanternaLigada ? "❌ DESLIGAR LUZ" : "🔦 LIGAR LANTERNA";
-    } catch (e) { alert("Sua câmera não suporta lanterna via navegador."); }
-};
+        // 1. Reseta o leitor antes de começar
+        codeReader.reset();
+        console.log("ZXing: Motor reiniciado.");
 
-window.toggleConfig = () => {
-    const p = document.getElementById("painelAjustes");
-    if(p) p.style.display = p.style.display === "none" ? "block" : "none";
-};
+        // 2. Busca os dispositivos de vídeo
+        const videoInputDevices = await codeReader.listVideoInputDevices();
+        
+        if (videoInputDevices.length === 0) {
+            alert("Nenhuma câmera encontrada.");
+            return;
+        }
 
-// --- SALVAR NO BANCO ---
+        // 3. Tenta encontrar especificamente a câmera traseira (environment)
+        // Se não encontrar pelo nome, pega a última da lista (geralmente a traseira)
+        let selectedDeviceId = videoInputDevices[0].deviceId;
+        
+        const cameraTraseira = videoInputDevices.find(device => 
+            device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('traseira') ||
+            device.label.toLowerCase().includes('environment')
+        );
+
+        if (cameraTraseira) {
+            selectedDeviceId = cameraTraseira.deviceId;
+        } else if (videoInputDevices.length > 1) {
+            selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+        }
+
+        console.log("Iniciando na câmera:", selectedDeviceId);
+
+        // 4. Inicia a decodificação contínua
+        // O primeiro parâmetro 'reader' deve ser o ID da tag <video> no HTML
+        await codeReader.decodeFromVideoDevice(selectedDeviceId, 'reader', (result, err) => {
+            if (result) {
+                console.log("Código lido:", result.text);
+                onScanSuccess(result.text); 
+            }
+            // Ignoramos erros de 'NotFoundException' para não sujar o console
+            if (err && !(err.name === 'NotFoundException')) {
+                // Se for um erro real (permissão, etc), mostramos
+                if (err.name !== 'TypeError') console.error("Erro ZXing:", err);
+            }
+        });
+
+    } catch (e) {
+        console.error("Falha crítica no Scanner:", e);
+        alert("Erro ao acessar câmera: " + e.message);
+    }
+}
+
 async function onScanSuccess(texto) {
     if (processandoBipe) return;
     processandoBipe = true;
+    resetarTimerInatividade();
+
+    if (!grupoAtual || grupoAtual === "todos") {
+        alert("⚠️ Selecione um grupo específico nos Ajustes antes de bipar.");
+        processandoBipe = false;
+        return;
+    }
+
+    const status = document.getElementById("statusEnvio");
+    status.style.display = "block";
 
     try {
         const q = query(collection(db, "scans"), where("link", "==", texto.trim()), where("grupo", "==", grupoAtual));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-            alert("⚠️ Já registrado!");
-        } else {
-            const novoDoc = { 
-                link: texto.trim(), 
-                data: new Date().toLocaleString('pt-BR'), 
-                operador: operadorAtual, 
-                grupo: grupoAtual, 
-                timestamp: Date.now() 
-            };
-            await addDoc(collection(db, "scans"), novoDoc);
-            listaEscaneamentos.unshift(novoDoc);
-            atualizarTabela();
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            alert("⚠️ Já registrado por este grupo!");
+            status.style.display = "none";
+            processandoBipe = false;
+            return;
         }
-    } catch (e) { console.error(e); }
-    setTimeout(() => { processandoBipe = false; }, 3000);
+
+        const novoDoc = {
+            link: texto.trim(),
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            timestamp: Date.now()
+        };
+
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+        console.log("✅ Salvo!");
+    } catch (e) {
+        alert("Erro: " + e.message);
+    } finally {
+        status.style.display = "none";
+        processandoBipe = false; 
+    }
+}
+
+// --- HISTÓRICO E INTERFACE ---
+
+async function carregarHistorico() {
+    try {
+        const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
+        const snap = await getDocs(q);
+        listaEscaneamentos = snap.docs.map(d => d.data());
+        atualizarTabela();
+    } catch (e) { console.error("Erro histórico:", e); }
 }
 
 function atualizarTabela() {
@@ -143,18 +231,106 @@ function atualizarTabela() {
     if (!corpo) return;
     corpo.innerHTML = listaEscaneamentos.map(item => `
         <tr>
-            <td>✅</td>
+            <td><span style="color: #27ae60;">✅ Ok</span></td>
             <td style="word-break:break-all"><strong>${item.link}</strong></td>
             <td>${item.data}</td>
-            <td>${item.operador}</td>
-            <td><button class="btn-acao">ℹ️</button></td>
+            <td>${item.operador} (${item.grupo})</td> 
+            <td><button onclick="verDetalhes('${item.timestamp}')" class="btn-acao">ℹ️</button></td>
         </tr>
     `).join('');
 }
 
-async function carregarHistorico() {
-    const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"));
-    const snap = await getDocs(q);
-    listaEscaneamentos = snap.docs.map(d => d.data());
-    atualizarTabela();
+// --- CONFIGURAÇÕES E OUTROS ---
+
+function carregarConfiguracoesSalvas() {
+    const fpsSalvo = localStorage.getItem("scannerFPS");
+    const inatividadeSalva = localStorage.getItem("scannerInatividade");
+    if (fpsSalvo) document.getElementById("setFPS").value = fpsSalvo;
+    if (inatividadeSalva) document.getElementById("setInatividade").value = inatividadeSalva;
 }
+
+window.salvarPreferencias = () => {
+    const novoNome = document.getElementById("nomeOperadorTroca").value;
+    if (novoNome) operadorAtual = novoNome;
+    if (isAdmin) {
+        const grupoSel = document.getElementById("filtroGrupo").value;
+        if (grupoSel !== "todos") grupoAtual = grupoSel;
+    }
+    localStorage.setItem("scannerFPS", document.getElementById("setFPS").value);
+    localStorage.setItem("scannerInatividade", document.getElementById("setInatividade").value);
+    document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+    document.getElementById("painelAjustes").style.display = "none";
+    iniciarScanner();
+    alert("⚙️ Perfil e Scanner atualizados!");
+};
+
+function resetarTimerInatividade() {
+    if (timerInatividade) clearTimeout(timerInatividade);
+    if (tempoInatividadeMS === 0) return;
+    timerInatividade = setTimeout(() => {
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear().then(() => {
+                document.getElementById("reader").innerHTML = `
+                    <div style="text-align:center; padding: 25px; border: 2px dashed #ff9800; border-radius: 10px; background: #fff5e6; color: #333;">
+                        <p>🔋 <strong>Modo de Economia</strong></p>
+                        <button onclick="window.location.reload()" style="background:#27ae60; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer;">🔄LIGAR CÂMERA</button>
+                    </div>`;
+            });
+        }
+    }, tempoInatividadeMS); 
+}
+
+window.gerarRelatorio = async function() {
+    const grupoFiltro = document.getElementById("filtroGrupo").value;
+    const dataInicio = document.getElementById("filtroDataInicio").value;
+    const dataFim = document.getElementById("filtroDataFim").value;
+    const nomeFiltro = document.getElementById("filtroOperador").value.toLowerCase();
+    try {
+        let q;
+        if (grupoFiltro === "todos" && isAdmin) {
+            q = query(collection(db, "scans"), orderBy("timestamp", "desc"));
+        } else {
+            q = query(collection(db, "scans"), where("grupo", "==", grupoFiltro), orderBy("timestamp", "desc"));
+        }
+        const snap = await getDocs(q);
+        let resultados = snap.docs.map(d => d.data());
+        if (dataInicio && dataFim) {
+            const inicio = new Date(dataInicio + "T00:00:00").getTime();
+            const fim = new Date(dataFim + "T23:59:59").getTime();
+            resultados = resultados.filter(r => r.timestamp >= inicio && r.timestamp <= fim);
+        }
+        if (nomeFiltro) {
+            resultados = resultados.filter(r => r.operador.toLowerCase().includes(nomeFiltro));
+        }
+        listaEscaneamentos = resultados;
+        atualizarTabela();
+        alert(`Relatório gerado: ${resultados.length} registros.`);
+    } catch (e) { alert("Erro: " + e.message); }
+};
+
+window.toggleConfig = () => {
+    const p = document.getElementById("painelAjustes");
+    p.style.display = p.style.display === "none" ? "block" : "none";
+};
+
+window.toggleDarkMode = () => {
+    document.body.classList.toggle("dark-mode");
+    localStorage.setItem("modoEscuro", document.body.classList.contains("dark-mode"));
+};
+
+window.exportarParaCSV = function() {
+    let csv = "Link;Data;Operador;Grupo\n";
+    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Relatorio_${grupoAtual}.csv`;
+    link.click();
+};
+
+window.verDetalhes = (id) => {
+    const scan = listaEscaneamentos.find(s => s.timestamp == id);
+    alert(`QR: ${scan.link}\nData: ${scan.data}\nOperador: ${scan.operador}\nGrupo: ${scan.grupo}`);
+};
+
+if (localStorage.getItem("modoEscuro") === "true") document.body.classList.add("dark-mode");
