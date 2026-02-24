@@ -16,11 +16,24 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const codeReader = new ZXing.BrowserQRCodeReader();
 
+// Recuperar preferências do LocalStorage assim que logar
+const prefsSalvas = JSON.parse(localStorage.getItem('prefsQR') || '{}');
+if (prefsSalvas.darkMode) document.body.classList.add('dark-mode');
+if (prefsSalvas.tempoInatividade) {
+    document.getElementById("setInatividade").value = prefsSalvas.tempoInatividade;
+}
+// Se o usuário já tinha mudado o nome antes, mantém o nome salvo
+if (prefsSalvas.nomePersonalizado) {
+    operadorAtual = prefsSalvas.nomePersonalizado;
+    document.getElementById("nomeOperadorTroca").value = operadorAtual;
+}
+
 let operadorAtual = "";
 let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
+let timerInatividade;
 
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
@@ -65,15 +78,35 @@ window.toggleConfig = () => {
     p.style.display = p.style.display === "none" ? "block" : "none";
 };
 
-window.toggleDarkMode = () => {
-    document.body.classList.toggle("dark-mode");
+window.toggleDarkMode = function() {
+    document.body.classList.toggle('dark-mode');
+    // Salva automaticamente após clicar
+    window.salvarPreferencias(); 
 };
 
-window.salvarPreferencias = () => {
+window.salvarPreferencias = function() {
     const novoNome = document.getElementById("nomeOperadorTroca").value;
+    const novoTempo = document.getElementById("setInatividade").value;
+    const modoEscuroAtivo = document.body.classList.contains('dark-mode');
+
+    // Salva no Objeto de Preferências
+    const novasPrefs = {
+        nomePersonalizado: novoNome,
+        tempoInatividade: novoTempo,
+        darkMode: modoEscuroAtivo
+    };
+
+    // Grava no LocalStorage (Transforma o objeto em texto)
+    localStorage.setItem('prefsQR', JSON.stringify(novasPrefs));
+
+    // Aplica as mudanças no app na hora
     if (novoNome) operadorAtual = novoNome;
-    alert("Configurações aplicadas!");
-    window.toggleConfig();
+    
+    // Atualiza a frase de boas-vindas lá em cima
+    document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+
+    alert("✅ Configurações salvas no seu celular!");
+    window.toggleConfig(); // Fecha o painel
 };
 
 window.enviarManual = async function() {
@@ -311,3 +344,23 @@ window.ativarScannerAoVivo = async function() {
         video.style.display = "none";
     }
 };
+
+function resetarTimer() {
+    clearTimeout(timerInatividade);
+    const tempoDesejado = parseInt(document.getElementById("setInatividade").value);
+    
+    if (tempoDesejado > 0) {
+        timerInatividade = setTimeout(() => {
+            // Se a câmera estiver ligada, desliga
+            codeReader.reset();
+            document.getElementById("reader").style.display = "none";
+            document.getElementById("btnLigarCamera").style.display = "block";
+            document.getElementById("btnLigarCamera").innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)";
+            console.log("Câmera desligada por inatividade.");
+        }, tempoDesejado);
+    }
+}
+
+// Monitora toques na tela e cliques para resetar o tempo de inatividade
+document.addEventListener("click", resetarTimer);
+document.addEventListener("touchstart", resetarTimer);
