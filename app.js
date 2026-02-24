@@ -41,7 +41,7 @@ onAuthStateChanged(auth, async (user) => {
                 await carregarHistorico();
                 await carregarGruposDinamicos();
                 await window.carregarOperadoresDoGrupo();
-                setTimeout(() => { iniciarScanner(); }, 1500);
+                //setTimeout(() => { iniciarScanner(); }, 1500);
             }
         } catch (e) { console.error("Erro no login:", e); }
     } else {
@@ -284,5 +284,30 @@ window.lerQrDeArquivo = async function(event) {
     } catch (e) {
         console.error("Erro no processamento do arquivo:", e);
         if (status) status.style.display = "none";
+    }
+};
+
+// --- FUNÇÃO PARA ATIVAR O SCANNER SÓ QUANDO O USUÁRIO QUISER ---
+window.ativarScannerAoVivo = async function() {
+    const btn = document.getElementById("btnLigarCamera");
+    const video = document.getElementById("reader");
+
+    if (!btn || !video) return;
+
+    btn.innerText = "⌛ Iniciando...";
+    
+    try {
+        // 1. Mostra o elemento de vídeo
+        video.style.display = "block";
+        
+        // 2. Chama a função de motor do scanner que você já tem no código
+        await iniciarScanner();
+        
+        // 3. Se iniciou com sucesso, remove o botão da tela
+        btn.style.display = "none";
+    } catch (e) {
+        alert("Erro ao acessar câmera: " + e.message);
+        btn.innerText = "🚀 LIGAR SCANNER AO VIVO";
+        video.style.display = "none";
     }
 };

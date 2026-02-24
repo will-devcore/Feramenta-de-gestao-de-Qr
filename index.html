@@ -63,8 +63,13 @@
                 </select>
             </div>
 
-            <div id="container-leitor" style="width: 100%; max-width: 500px; margin: auto; background: #000; border-radius: 8px; overflow: hidden;">
-            <video id="reader" style="width: 100%; height: auto; display: block;"></video>
+            <div id="container-leitor" style="width: 100%; max-width: 500px; margin: auto; background: #000; border-radius: 8px; overflow: hidden; position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
+    
+                <video id="reader" style="width: 100%; height: auto; display: none;"></video>
+
+                <button id="btnLigarCamera" onclick="ativarScannerAoVivo()" style="position: absolute; background: #e67e22; color: white; border: none; padding: 15px 25px; border-radius: 50px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 10;">
+                    🚀 LIGAR SCANNER AO VIVO
+                </button>
             </div>
 
             <div style="padding: 15px; background: #fff; margin: 15px 10px; border-radius: 8px; border: 2px solid #3498db; text-align: center;">
