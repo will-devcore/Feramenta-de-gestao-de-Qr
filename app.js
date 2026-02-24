@@ -11,29 +11,39 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
+// --- INICIALIZAÇÃO ---
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const codeReader = new ZXing.BrowserQRCodeReader();
 
-// Recuperar preferências do LocalStorage assim que logar
-const prefsSalvas = JSON.parse(localStorage.getItem('prefsQR') || '{}');
-if (prefsSalvas.darkMode) document.body.classList.add('dark-mode');
-if (prefsSalvas.tempoInatividade) {
-    document.getElementById("setInatividade").value = prefsSalvas.tempoInatividade;
-}
-// Se o usuário já tinha mudado o nome antes, mantém o nome salvo
-if (prefsSalvas.nomePersonalizado) {
-    operadorAtual = prefsSalvas.nomePersonalizado;
-    document.getElementById("nomeOperadorTroca").value = operadorAtual;
-}
-
+// --- VARIÁVEIS GLOBAIS (Sempre no topo) ---
 let operadorAtual = "";
 let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
 let timerInatividade;
+
+// --- FUNÇÃO DE MEMÓRIA (Recuperar preferências) ---
+function aplicarPreferenciasSalvas() {
+    const prefsSalvas = JSON.parse(localStorage.getItem('prefsQR') || '{}');
+    
+    if (prefsSalvas.darkMode) {
+        document.body.classList.add('dark-mode');
+    }
+    
+    if (prefsSalvas.tempoInatividade) {
+        const select = document.getElementById("setInatividade");
+        if (select) select.value = prefsSalvas.tempoInatividade;
+    }
+    
+    if (prefsSalvas.nomePersonalizado) {
+        operadorAtual = prefsSalvas.nomePersonalizado;
+        const inputNome = document.getElementById("nomeOperadorTroca");
+        if (inputNome) inputNome.value = operadorAtual;
+    }
+}
 
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
@@ -42,19 +52,26 @@ onAuthStateChanged(auth, async (user) => {
             const userDoc = await getDoc(doc(db, "usuarios", user.uid));
             if (userDoc.exists()) {
                 const dados = userDoc.data();
+                
+                // Aplica dados do banco
                 operadorAtual = dados.nome;
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
 
+                // Aplica o que estiver no LocalStorage por cima (preferência do usuário)
+                aplicarPreferenciasSalvas();
+
+                // Atualiza Interface
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
-                document.getElementById("nomeOperadorTroca").value = operadorAtual;
                 document.getElementById("telaLogin").style.display = "none";
                 document.getElementById("conteudoApp").style.display = "block";
                 
+                // Carrega dados
                 await carregarHistorico();
                 await carregarGruposDinamicos();
-                await window.carregarOperadoresDoGrupo();
-                //setTimeout(() => { iniciarScanner(); }, 1500);
+                if (window.carregarOperadoresDoGrupo) await window.carregarOperadoresDoGrupo();
+                
+                resetarTimer(); // Inicia o vigia de inatividade
             }
         } catch (e) { console.error("Erro no login:", e); }
     } else {
@@ -63,7 +80,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- FUNÇÕES EXPOSTAS AO HTML (window.) ---
+// --- FUNÇÕES EXPOSTAS AO HTML ---
 
 window.fazerLogin = function() {
     const email = document.getElementById("emailLogin").value;
@@ -75,12 +92,11 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 
 window.toggleConfig = () => {
     const p = document.getElementById("painelAjustes");
-    p.style.display = p.style.display === "none" ? "block" : "none";
+    if (p) p.style.display = p.style.display === "none" ? "block" : "none";
 };
 
 window.toggleDarkMode = function() {
     document.body.classList.toggle('dark-mode');
-    // Salva automaticamente após clicar
     window.salvarPreferencias(); 
 };
 
@@ -89,41 +105,32 @@ window.salvarPreferencias = function() {
     const novoTempo = document.getElementById("setInatividade").value;
     const modoEscuroAtivo = document.body.classList.contains('dark-mode');
 
-    // Salva no Objeto de Preferências
     const novasPrefs = {
         nomePersonalizado: novoNome,
         tempoInatividade: novoTempo,
         darkMode: modoEscuroAtivo
     };
 
-    // Grava no LocalStorage (Transforma o objeto em texto)
     localStorage.setItem('prefsQR', JSON.stringify(novasPrefs));
 
-    // Aplica as mudanças no app na hora
-    if (novoNome) operadorAtual = novoNome;
-    
-    // Atualiza a frase de boas-vindas lá em cima
-    document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+    if (novoNome) {
+        operadorAtual = novoNome;
+        document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+    }
 
-    alert("✅ Configurações salvas no seu celular!");
-    window.toggleConfig(); // Fecha o painel
+    alert("✅ Configurações salvas!");
+    resetarTimer(); // Reinicia o timer com o novo tempo
 };
 
 window.enviarManual = async function() {
     const input = document.getElementById("urlManual");
     const valor = input.value.trim();
-    
     if (!valor) return;
-
-    // Aguarda a resposta da função de salvamento
     const salvouComSucesso = await onScanSuccess(valor);
-
     if (salvouComSucesso) {
         input.value = "";
         alert("✅ Registro Manual Salvo com Sucesso!");
-    } 
-    // Se não salvou (duplicado), o onScanSuccess já mostrou o alerta de erro, 
-    // então não fazemos nada aqui para não confundir o usuário.
+    }
 };
 
 window.gerarRelatorio = async function() {
@@ -136,11 +143,7 @@ window.gerarRelatorio = async function() {
 
         const snap = await getDocs(q);
         let resultados = snap.docs.map(d => d.data());
-        
-        if (nomeFiltro) {
-            resultados = resultados.filter(r => r.operador.toLowerCase().includes(nomeFiltro));
-        }
-
+        if (nomeFiltro) resultados = resultados.filter(r => r.operador.toLowerCase().includes(nomeFiltro));
         listaEscaneamentos = resultados;
         atualizarTabela();
     } catch (e) { alert("Erro na busca: " + e.message); }
@@ -182,44 +185,24 @@ async function iniciarScanner() {
 }
 
 async function onScanSuccess(texto) {
-    if (processandoBipe) return false; // Retorna falso se já estiver ocupado
+    if (processandoBipe) return false;
     processandoBipe = true;
-    
     const linkLimpo = texto.trim();
     document.getElementById("statusEnvio").style.display = "block";
-
     try {
-        // Verifica duplicidade
-        const qDuplicado = query(
-            collection(db, "scans"), 
-            where("link", "==", linkLimpo),
-            where("grupo", "==", grupoAtual)
-        );
-        
+        const qDuplicado = query(collection(db, "scans"), where("link", "==", linkLimpo), where("grupo", "==", grupoAtual));
         const snapshotDuplicado = await getDocs(qDuplicado);
-
         if (!snapshotDuplicado.empty) {
             alert("⚠️ Atenção: Este link já foi registrado anteriormente pelo seu grupo!");
             finalizarProcessamento();
-            return false; // AVISO: Não salvou!
+            return false;
         }
-
-        // Salva se for novo
-        const novoDoc = {
-            link: linkLimpo,
-            data: new Date().toLocaleString('pt-BR'),
-            operador: operadorAtual,
-            grupo: grupoAtual,
-            timestamp: Date.now()
-        };
-
+        const novoDoc = { link: linkLimpo, data: new Date().toLocaleString('pt-BR'), operador: operadorAtual, grupo: grupoAtual, timestamp: Date.now() };
         await addDoc(collection(db, "scans"), novoDoc);
         listaEscaneamentos.unshift(novoDoc);
         atualizarTabela();
-        
         finalizarProcessamento();
-        return true; // SUCESSO: Salvou!
-
+        return true;
     } catch (e) { 
         console.error(e);
         finalizarProcessamento();
@@ -227,7 +210,6 @@ async function onScanSuccess(texto) {
     }
 }
 
-// Função auxiliar para limpar o status
 function finalizarProcessamento() {
     setTimeout(() => { 
         processandoBipe = false; 
@@ -275,92 +257,59 @@ function atualizarTabela() {
         </tr>`).join('');
 }
 
-// --- FUNÇÃO PARA LER QR CODE A PARTIR DE UMA FOTO TIRADA ---
 window.lerQrDeArquivo = async function(event) {
     const arquivo = event.target.files[0];
     if (!arquivo) return;
-
     const status = document.getElementById("statusEnvio");
-    if (status) {
-        status.style.display = "block";
-        status.innerText = "🔍 Analisando imagem...";
-    }
-
+    if (status) { status.style.display = "block"; status.innerText = "🔍 Analisando imagem..."; }
     try {
         const imagemUrl = URL.createObjectURL(arquivo);
         const img = new Image();
         img.src = imagemUrl;
-
         img.onload = async () => {
             try {
-                // Tenta decodificar o QR Code da imagem tirada
                 const resultado = await codeReader.decodeFromImageElement(img);
-                
-                // Se encontrar o link, chama a onScanSuccess (que já tem a trava de duplicata)
                 const salvou = await onScanSuccess(resultado.text);
-                
-                if (salvou) {
-                    alert("✅ QR Code identificado e salvo com sucesso!");
-                }
-            } catch (err) {
-                console.error("Erro na leitura da foto:", err);
-                alert("❌ Não foi possível ler o QR Code nesta foto. Tente tirar a foto mais de perto ou verifique se não há reflexos.");
-            } finally {
-                if (status) {
-                    status.style.display = "none";
-                    status.innerText = "💾 Processando dados...";
-                }
-                // Limpa o input de arquivo para permitir tirar outra foto do mesmo item se precisar
+                if (salvou) alert("✅ QR Code identificado!");
+            } catch (err) { alert("❌ Não foi possível ler o QR Code."); }
+            finally {
+                if (status) { status.style.display = "none"; status.innerText = "💾 Processando dados..."; }
                 event.target.value = "";
             }
         };
-    } catch (e) {
-        console.error("Erro no processamento do arquivo:", e);
-        if (status) status.style.display = "none";
-    }
+    } catch (e) { console.error(e); }
 };
 
-// --- FUNÇÃO PARA ATIVAR O SCANNER SÓ QUANDO O USUÁRIO QUISER ---
 window.ativarScannerAoVivo = async function() {
     const btn = document.getElementById("btnLigarCamera");
     const video = document.getElementById("reader");
-
     if (!btn || !video) return;
-
     btn.innerText = "⌛ Iniciando...";
-    
     try {
-        // 1. Mostra o elemento de vídeo
         video.style.display = "block";
-        
-        // 2. Chama a função de motor do scanner que você já tem no código
         await iniciarScanner();
-        
-        // 3. Se iniciou com sucesso, remove o botão da tela
         btn.style.display = "none";
     } catch (e) {
-        alert("Erro ao acessar câmera: " + e.message);
+        alert("Erro na câmera.");
         btn.innerText = "🚀 LIGAR SCANNER AO VIVO";
-        video.style.display = "none";
     }
 };
 
 function resetarTimer() {
     clearTimeout(timerInatividade);
-    const tempoDesejado = parseInt(document.getElementById("setInatividade").value);
-    
+    const select = document.getElementById("setInatividade");
+    if (!select) return;
+    const tempoDesejado = parseInt(select.value);
     if (tempoDesejado > 0) {
         timerInatividade = setTimeout(() => {
-            // Se a câmera estiver ligada, desliga
             codeReader.reset();
-            document.getElementById("reader").style.display = "none";
-            document.getElementById("btnLigarCamera").style.display = "block";
-            document.getElementById("btnLigarCamera").innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)";
-            console.log("Câmera desligada por inatividade.");
+            const v = document.getElementById("reader");
+            const b = document.getElementById("btnLigarCamera");
+            if (v) v.style.display = "none";
+            if (b) { b.style.display = "block"; b.innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)"; }
         }, tempoDesejado);
     }
 }
 
-// Monitora toques na tela e cliques para resetar o tempo de inatividade
 document.addEventListener("click", resetarTimer);
 document.addEventListener("touchstart", resetarTimer);
