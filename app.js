@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -11,19 +11,16 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
-// ... (Mantenha seus imports e firebaseConfig no topo)
-
-const codeReader = new ZXing.BrowserQRCodeReader();
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const codeReader = new ZXing.BrowserQRCodeReader();
 
 let operadorAtual = "";
 let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
-let videoTrack = null;
 
 // --- MONITOR DE ACESSO ---
 onAuthStateChanged(auth, async (user) => {
@@ -36,22 +33,15 @@ onAuthStateChanged(auth, async (user) => {
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
 
-                // 1. Atualiza a interface IMEDIATAMENTE
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+                document.getElementById("nomeOperadorTroca").value = operadorAtual;
                 document.getElementById("telaLogin").style.display = "none";
                 document.getElementById("conteudoApp").style.display = "block";
                 
-                // 2. Carrega os dados do Firebase ANTES da câmera
-                console.log("Sincronizando dados...");
                 await carregarHistorico();
-                await carregarGruposDinamicos(); 
+                await carregarGruposDinamicos();
                 await window.carregarOperadoresDoGrupo();
-
-                // 3. SOLUÇÃO PARA CÂMERA PRETA: 
-                // Aguarda 1.5 segundos para garantir que a interface montou e as permissões estão prontas
-                setTimeout(() => {
-                    iniciarScanner();
-                }, 1500); 
+                setTimeout(() => { iniciarScanner(); }, 1500);
             }
         } catch (e) { console.error("Erro no login:", e); }
     } else {
@@ -60,95 +50,153 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- MOTOR SCANNER COM TRATAMENTO DE ERRO ---
+// --- FUNÇÕES EXPOSTAS AO HTML (window.) ---
+
+window.fazerLogin = function() {
+    const email = document.getElementById("emailLogin").value;
+    const senha = document.getElementById("senhaLogin").value;
+    signInWithEmailAndPassword(auth, email, senha).catch(e => alert("Erro: " + e.message));
+};
+
+window.fazerLogout = () => signOut(auth).then(() => location.reload());
+
+window.toggleConfig = () => {
+    const p = document.getElementById("painelAjustes");
+    p.style.display = p.style.display === "none" ? "block" : "none";
+};
+
+window.toggleDarkMode = () => {
+    document.body.classList.toggle("dark-mode");
+};
+
+window.salvarPreferencias = () => {
+    const novoNome = document.getElementById("nomeOperadorTroca").value;
+    if (novoNome) operadorAtual = novoNome;
+    alert("Configurações aplicadas!");
+    window.toggleConfig();
+};
+
+window.enviarManual = async function() {
+    const input = document.getElementById("urlManual");
+    if (!input.value.trim()) return;
+    await onScanSuccess(input.value.trim());
+    input.value = "";
+    alert("✅ Enviado com sucesso!");
+};
+
+window.gerarRelatorio = async function() {
+    const grupoFiltro = document.getElementById("filtroGrupo").value;
+    const nomeFiltro = document.getElementById("filtroOperador").value.toLowerCase();
+    try {
+        let q = (grupoFiltro === "todos") ? 
+            query(collection(db, "scans"), orderBy("timestamp", "desc"), limit(100)) : 
+            query(collection(db, "scans"), where("grupo", "==", grupoFiltro), orderBy("timestamp", "desc"));
+
+        const snap = await getDocs(q);
+        let resultados = snap.docs.map(d => d.data());
+        
+        if (nomeFiltro) {
+            resultados = resultados.filter(r => r.operador.toLowerCase().includes(nomeFiltro));
+        }
+
+        listaEscaneamentos = resultados;
+        atualizarTabela();
+    } catch (e) { alert("Erro na busca: " + e.message); }
+};
+
+window.exportarParaCSV = function() {
+    let csv = "Link;Data;Operador;Grupo\n";
+    listaEscaneamentos.forEach(i => csv += `${i.link};${i.data};${i.operador};${i.grupo}\n`);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Relatorio_QR.csv`;
+    link.click();
+};
+
+window.carregarOperadoresDoGrupo = async function() {
+    const select = document.getElementById("filtroGrupo");
+    const datalist = document.getElementById("listaOperadoresSugestao");
+    if (!select || !datalist) return;
+    try {
+        const q = (select.value === "todos") ? collection(db, "usuarios") : query(collection(db, "usuarios"), where("grupo", "==", select.value));
+        const snap = await getDocs(q);
+        datalist.innerHTML = snap.docs.map(d => `<option value="${d.data().nome}">`).join('');
+    } catch (e) { console.error(e); }
+};
+
+// --- MOTOR INTERNO ---
+
 async function iniciarScanner() {
     try {
-        // Reseta qualquer tentativa anterior travada
         await codeReader.reset();
-        
         const devices = await codeReader.listVideoInputDevices();
-        if (devices.length === 0) {
-            console.warn("Nenhuma câmera encontrada.");
-            return;
-        }
-
-        // Seleciona a câmera traseira
+        if (devices.length === 0) return;
         const selectedId = devices[devices.length - 1].deviceId;
-        
-        // Configurações para forçar o navegador a "acordar" a câmera
-        const constraints = { 
-            video: { 
-                deviceId: { ideal: selectedId },
-                facingMode: "environment",
-                width: { ideal: 1280 }
-            } 
-        };
-
-        // Solicita o stream explicitamente
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const videoElement = document.getElementById('reader');
-        
-        if (videoElement) {
-            videoElement.srcObject = stream;
-            videoTrack = stream.getVideoTracks()[0];
-            
-            // Inicia a leitura do ZXing no elemento de vídeo
-            codeReader.decodeFromVideoElement(videoElement, (result, err) => {
-                if (result && !processandoBipe) {
-                    onScanSuccess(result.text); 
-                }
-            });
-        }
-    } catch (e) {
-        console.error("Falha ao iniciar câmera:", e);
-        // Se der erro de câmera, os grupos e operadores CONTINUAM funcionando
-    }
+        codeReader.decodeFromVideoDevice(selectedId, 'reader', (result, err) => {
+            if (result && !processandoBipe) onScanSuccess(result.text);
+        });
+    } catch (e) { console.warn("Câmera indisponível"); }
 }
 
-// --- FUNÇÃO PARA GARANTIR OS GRUPOS (PARA ADMIN E OPERADOR) ---
+async function onScanSuccess(texto) {
+    if (processandoBipe) return;
+    processandoBipe = true;
+    document.getElementById("statusEnvio").style.display = "block";
+    try {
+        const novoDoc = {
+            link: texto.trim(),
+            data: new Date().toLocaleString('pt-BR'),
+            operador: operadorAtual,
+            grupo: grupoAtual,
+            timestamp: Date.now()
+        };
+        await addDoc(collection(db, "scans"), novoDoc);
+        listaEscaneamentos.unshift(novoDoc);
+        atualizarTabela();
+    } catch (e) { console.error(e); }
+    setTimeout(() => { 
+        processandoBipe = false; 
+        document.getElementById("statusEnvio").style.display = "none";
+    }, 2000);
+}
+
+async function carregarHistorico() {
+    try {
+        const q = query(collection(db, "scans"), where("grupo", "==", grupoAtual), orderBy("timestamp", "desc"), limit(20));
+        const snap = await getDocs(q);
+        listaEscaneamentos = snap.docs.map(d => d.data());
+        atualizarTabela();
+    } catch (e) { console.error(e); }
+}
+
 async function carregarGruposDinamicos() {
     const selectGrupo = document.getElementById("filtroGrupo");
     if (!selectGrupo) return;
-
     try {
         if (!isAdmin) {
-            // Se não for admin, trava no grupo dele
             selectGrupo.innerHTML = `<option value="${grupoAtual}">${grupoAtual}</option>`;
-            selectGrupo.disabled = true;
             return;
         }
-
-        const querySnapshot = await getDocs(collection(db, "usuarios"));
+        const snap = await getDocs(collection(db, "usuarios"));
         const gruposSet = new Set();
-        querySnapshot.forEach(doc => {
-            const d = doc.data();
-            if (d.grupo) gruposSet.add(d.grupo);
-        });
-
+        snap.forEach(doc => { if (doc.data().grupo) gruposSet.add(doc.data().grupo); });
         let opcoes = '<option value="todos">-- TODOS OS GRUPOS --</option>';
         gruposSet.forEach(g => { opcoes += `<option value="${g}">${g}</option>`; });
         selectGrupo.innerHTML = opcoes;
         selectGrupo.disabled = false;
-    } catch (e) { console.error("Erro nos grupos:", e); }
+    } catch (e) { console.error(e); }
 }
 
-// --- ATUALIZAR A TABELA NA TELA ---
 function atualizarTabela() {
     const corpo = document.getElementById("corpoTabela");
     if (!corpo) return;
-
-    if (listaEscaneamentos.length === 0) {
-        corpo.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
-        return;
-    }
-
     corpo.innerHTML = listaEscaneamentos.map(item => `
         <tr>
-            <td><span style="color: #27ae60; font-weight: bold;">✅ Ok</span></td>
-            <td style="word-break:break-all; font-size: 0.8rem;"><strong>${item.link}</strong></td>
-            <td style="white-space: nowrap;">${item.data}</td>
-            <td>${item.operador}</td> 
-            <td><button onclick="alert('${item.link}')" style="border:none; background:none; cursor:pointer;">ℹ️</button></td>
-        </tr>
-    `).join('');
+            <td>✅ Ok</td>
+            <td style="word-break:break-all">${item.link}</td>
+            <td>${item.data}</td>
+            <td>${item.operador} (${item.grupo})</td>
+            <td><button onclick="alert('${item.link}')">ℹ️</button></td>
+        </tr>`).join('');
 }
