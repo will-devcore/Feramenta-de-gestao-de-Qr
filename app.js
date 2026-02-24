@@ -78,10 +78,19 @@ window.salvarPreferencias = () => {
 
 window.enviarManual = async function() {
     const input = document.getElementById("urlManual");
-    if (!input.value.trim()) return;
-    await onScanSuccess(input.value.trim());
-    input.value = "";
-    alert("✅ Enviado com sucesso!");
+    const valor = input.value.trim();
+    
+    if (!valor) return;
+
+    // Aguarda a resposta da função de salvamento
+    const salvouComSucesso = await onScanSuccess(valor);
+
+    if (salvouComSucesso) {
+        input.value = "";
+        alert("✅ Registro Manual Salvo com Sucesso!");
+    } 
+    // Se não salvou (duplicado), o onScanSuccess já mostrou o alerta de erro, 
+    // então não fazemos nada aqui para não confundir o usuário.
 };
 
 window.gerarRelatorio = async function() {
