@@ -11,37 +11,40 @@ const firebaseConfig = {
     appId: "1:587607393218:web:1cc6d38577f69cc0110c5b"
 };
 
-// --- INICIALIZAÇÃO ---
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const codeReader = new ZXing.BrowserQRCodeReader();
 
-// --- VARIÁVEIS GLOBAIS (Sempre no topo) ---
+// --- VARIÁVEIS GLOBAIS ---
 let operadorAtual = "";
 let grupoAtual = "";
 let isAdmin = false; 
 let processandoBipe = false; 
 let listaEscaneamentos = [];
-let timerInatividade;
+let timerInatividade; // Variável para o controle do repouso
 
-// --- FUNÇÃO DE MEMÓRIA (Recuperar preferências) ---
-function aplicarPreferenciasSalvas() {
-    const prefsSalvas = JSON.parse(localStorage.getItem('prefsQR') || '{}');
-    
-    if (prefsSalvas.darkMode) {
-        document.body.classList.add('dark-mode');
-    }
-    
-    if (prefsSalvas.tempoInatividade) {
-        const select = document.getElementById("setInatividade");
-        if (select) select.value = prefsSalvas.tempoInatividade;
-    }
-    
-    if (prefsSalvas.nomePersonalizado) {
-        operadorAtual = prefsSalvas.nomePersonalizado;
-        const inputNome = document.getElementById("nomeOperadorTroca");
-        if (inputNome) inputNome.value = operadorAtual;
+// --- FUNÇÃO DE MEMÓRIA (CARREGAR) ---
+function carregarPreferenciasLocalStorage() {
+    const dados = localStorage.getItem('prefsQR');
+    if (dados) {
+        const prefs = JSON.parse(dados);
+        
+        // Aplica Modo Escuro
+        if (prefs.darkMode) document.body.classList.add('dark-mode');
+        
+        // Aplica Tempo de Inatividade no Select
+        if (prefs.tempoInatividade) {
+            const select = document.getElementById("setInatividade");
+            if (select) select.value = prefs.tempoInatividade;
+        }
+
+        // Aplica Nome Personalizado se houver
+        if (prefs.nomePersonalizado) {
+            operadorAtual = prefs.nomePersonalizado;
+            document.getElementById("nomeOperadorTroca").value = operadorAtual;
+            document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+        }
     }
 }
 
@@ -52,24 +55,23 @@ onAuthStateChanged(auth, async (user) => {
             const userDoc = await getDoc(doc(db, "usuarios", user.uid));
             if (userDoc.exists()) {
                 const dados = userDoc.data();
-                
-                // Aplica dados do banco
                 operadorAtual = dados.nome;
                 grupoAtual = dados.grupo;
                 isAdmin = dados.cargo === "admin"; 
 
-                // Aplica o que estiver no LocalStorage por cima (preferência do usuário)
-                aplicarPreferenciasSalvas();
-
-                // Atualiza Interface
+                // 1. Primeiro carrega o básico do banco
                 document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
+                document.getElementById("nomeOperadorTroca").value = operadorAtual;
+                
+                // 2. Depois sobrepõe com as preferências salvas no celular (LocalStorage)
+                carregarPreferenciasLocalStorage();
+
                 document.getElementById("telaLogin").style.display = "none";
                 document.getElementById("conteudoApp").style.display = "block";
                 
-                // Carrega dados
                 await carregarHistorico();
                 await carregarGruposDinamicos();
-                if (window.carregarOperadoresDoGrupo) await window.carregarOperadoresDoGrupo();
+                await window.carregarOperadoresDoGrupo();
                 
                 resetarTimer(); // Inicia o vigia de inatividade
             }
@@ -92,33 +94,33 @@ window.fazerLogout = () => signOut(auth).then(() => location.reload());
 
 window.toggleConfig = () => {
     const p = document.getElementById("painelAjustes");
-    if (p) p.style.display = p.style.display === "none" ? "block" : "none";
+    p.style.display = p.style.display === "none" ? "block" : "none";
 };
 
-window.toggleDarkMode = function() {
-    document.body.classList.toggle('dark-mode');
-    window.salvarPreferencias(); 
+window.toggleDarkMode = () => {
+    document.body.classList.toggle("dark-mode");
+    window.salvarPreferencias(); // Salva o estado ao mudar
 };
 
-window.salvarPreferencias = function() {
+window.salvarPreferencias = () => {
     const novoNome = document.getElementById("nomeOperadorTroca").value;
     const novoTempo = document.getElementById("setInatividade").value;
     const modoEscuroAtivo = document.body.classList.contains('dark-mode');
-
-    const novasPrefs = {
-        nomePersonalizado: novoNome,
-        tempoInatividade: novoTempo,
-        darkMode: modoEscuroAtivo
-    };
-
-    localStorage.setItem('prefsQR', JSON.stringify(novasPrefs));
 
     if (novoNome) {
         operadorAtual = novoNome;
         document.getElementById("infoUsuario").innerText = `Operador: ${operadorAtual} (${grupoAtual})`;
     }
 
-    alert("✅ Configurações salvas!");
+    // Grava tudo no celular
+    const objetoPrefs = {
+        nomePersonalizado: novoNome,
+        tempoInatividade: novoTempo,
+        darkMode: modoEscuroAtivo
+    };
+    localStorage.setItem('prefsQR', JSON.stringify(objetoPrefs));
+
+    alert("✅ Configurações salvas no dispositivo!");
     resetarTimer(); // Reinicia o timer com o novo tempo
 };
 
@@ -189,14 +191,17 @@ async function onScanSuccess(texto) {
     processandoBipe = true;
     const linkLimpo = texto.trim();
     document.getElementById("statusEnvio").style.display = "block";
+
     try {
         const qDuplicado = query(collection(db, "scans"), where("link", "==", linkLimpo), where("grupo", "==", grupoAtual));
         const snapshotDuplicado = await getDocs(qDuplicado);
+
         if (!snapshotDuplicado.empty) {
             alert("⚠️ Atenção: Este link já foi registrado anteriormente pelo seu grupo!");
             finalizarProcessamento();
             return false;
         }
+
         const novoDoc = { link: linkLimpo, data: new Date().toLocaleString('pt-BR'), operador: operadorAtual, grupo: grupoAtual, timestamp: Date.now() };
         await addDoc(collection(db, "scans"), novoDoc);
         listaEscaneamentos.unshift(novoDoc);
@@ -257,11 +262,12 @@ function atualizarTabela() {
         </tr>`).join('');
 }
 
+// --- FOTO ---
 window.lerQrDeArquivo = async function(event) {
     const arquivo = event.target.files[0];
     if (!arquivo) return;
     const status = document.getElementById("statusEnvio");
-    if (status) { status.style.display = "block"; status.innerText = "🔍 Analisando imagem..."; }
+    if (status) { status.style.display = "block"; status.innerText = "🔍 Analisando foto..."; }
     try {
         const imagemUrl = URL.createObjectURL(arquivo);
         const img = new Image();
@@ -270,8 +276,8 @@ window.lerQrDeArquivo = async function(event) {
             try {
                 const resultado = await codeReader.decodeFromImageElement(img);
                 const salvou = await onScanSuccess(resultado.text);
-                if (salvou) alert("✅ QR Code identificado!");
-            } catch (err) { alert("❌ Não foi possível ler o QR Code."); }
+                if (salvou) alert("✅ QR Code identificado e salvo!");
+            } catch (err) { alert("❌ Não foi possível ler o QR Code nesta foto."); }
             finally {
                 if (status) { status.style.display = "none"; status.innerText = "💾 Processando dados..."; }
                 event.target.value = "";
@@ -280,6 +286,7 @@ window.lerQrDeArquivo = async function(event) {
     } catch (e) { console.error(e); }
 };
 
+// --- SCANNER SOB DEMANDA ---
 window.ativarScannerAoVivo = async function() {
     const btn = document.getElementById("btnLigarCamera");
     const video = document.getElementById("reader");
@@ -290,15 +297,17 @@ window.ativarScannerAoVivo = async function() {
         await iniciarScanner();
         btn.style.display = "none";
     } catch (e) {
-        alert("Erro na câmera.");
+        alert("Erro ao acessar câmera.");
         btn.innerText = "🚀 LIGAR SCANNER AO VIVO";
     }
 };
 
+// --- TIMER DE INATIVIDADE ---
 function resetarTimer() {
     clearTimeout(timerInatividade);
     const select = document.getElementById("setInatividade");
     if (!select) return;
+    
     const tempoDesejado = parseInt(select.value);
     if (tempoDesejado > 0) {
         timerInatividade = setTimeout(() => {
@@ -306,10 +315,14 @@ function resetarTimer() {
             const v = document.getElementById("reader");
             const b = document.getElementById("btnLigarCamera");
             if (v) v.style.display = "none";
-            if (b) { b.style.display = "block"; b.innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)"; }
+            if (b) {
+                b.style.display = "block";
+                b.innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)";
+            }
         }, tempoDesejado);
     }
 }
 
+// OUVINTES PARA RESETAR O TIMER
 document.addEventListener("click", resetarTimer);
 document.addEventListener("touchstart", resetarTimer);
