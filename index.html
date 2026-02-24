@@ -67,15 +67,31 @@
             <video id="reader" style="width: 100%; height: auto; display: block;"></video>
             </div>
 
-            <div style="padding: 15px; background: #fff; margin: 15px 10px; border-radius: 8px; border: 2px dashed #3498db; text-align: center;">
-                <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">
-                    ⚠️ Não conseguiu ler? Cole a URL abaixo:
-                </label>
-                <div style="display: flex; gap: 5px;">
-                    <input type="text" id="urlManual" placeholder="Cole o link da nota aqui" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
-                    <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">
-                        ENVIAR
-                    </button>
+            <div style="padding: 15px; background: #fff; margin: 15px 10px; border-radius: 8px; border: 2px solid #3498db; text-align: center;">
+    
+                <div style="margin-bottom: 20px;">
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">
+                        📸 Opção A: Foto em alta resolução
+                    </label>
+                    <label for="inputArquivo" style="background: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; display: block; text-align: center; border: 2px solid #219150;">
+                        TIRAR FOTO DO QR CODE
+                    </label>
+                    <input type="file" id="inputArquivo" accept="image/*" capture="environment" style="display: none;" onchange="lerQrDeArquivo(event)">
+                    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Ideal para papéis amassados ou com pouco brilho.</p>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+
+                <div>
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">
+                        ⌨️ Opção B: Digitação Manual
+                    </label>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="text" id="urlManual" placeholder="Cole o link ou digite aqui" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
+                        <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">
+                            ENVIAR
+                        </button>
+                    </div>
                 </div>
             </div>
             

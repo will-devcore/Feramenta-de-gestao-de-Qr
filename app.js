@@ -241,3 +241,48 @@ function atualizarTabela() {
             <td><button onclick="alert('${item.link}')">ℹ️</button></td>
         </tr>`).join('');
 }
+
+// --- FUNÇÃO PARA LER QR CODE A PARTIR DE UMA FOTO TIRADA ---
+window.lerQrDeArquivo = async function(event) {
+    const arquivo = event.target.files[0];
+    if (!arquivo) return;
+
+    const status = document.getElementById("statusEnvio");
+    if (status) {
+        status.style.display = "block";
+        status.innerText = "🔍 Analisando imagem...";
+    }
+
+    try {
+        const imagemUrl = URL.createObjectURL(arquivo);
+        const img = new Image();
+        img.src = imagemUrl;
+
+        img.onload = async () => {
+            try {
+                // Tenta decodificar o QR Code da imagem tirada
+                const resultado = await codeReader.decodeFromImageElement(img);
+                
+                // Se encontrar o link, chama a onScanSuccess (que já tem a trava de duplicata)
+                const salvou = await onScanSuccess(resultado.text);
+                
+                if (salvou) {
+                    alert("✅ QR Code identificado e salvo com sucesso!");
+                }
+            } catch (err) {
+                console.error("Erro na leitura da foto:", err);
+                alert("❌ Não foi possível ler o QR Code nesta foto. Tente tirar a foto mais de perto ou verifique se não há reflexos.");
+            } finally {
+                if (status) {
+                    status.style.display = "none";
+                    status.innerText = "💾 Processando dados...";
+                }
+                // Limpa o input de arquivo para permitir tirar outra foto do mesmo item se precisar
+                event.target.value = "";
+            }
+        };
+    } catch (e) {
+        console.error("Erro no processamento do arquivo:", e);
+        if (status) status.style.display = "none";
+    }
+};
