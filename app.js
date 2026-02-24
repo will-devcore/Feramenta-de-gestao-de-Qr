@@ -140,15 +140,14 @@ async function iniciarScanner() {
 }
 
 async function onScanSuccess(texto) {
-    if (processandoBipe) return;
+    if (processandoBipe) return false; // Retorna falso se já estiver ocupado
     processandoBipe = true;
     
     const linkLimpo = texto.trim();
     document.getElementById("statusEnvio").style.display = "block";
 
     try {
-        // --- TRAVA DE DUPLICIDADE ---
-        // Verifica se este link já existe no banco de dados para o seu grupo
+        // Verifica duplicidade
         const qDuplicado = query(
             collection(db, "scans"), 
             where("link", "==", linkLimpo),
@@ -158,13 +157,12 @@ async function onScanSuccess(texto) {
         const snapshotDuplicado = await getDocs(qDuplicado);
 
         if (!snapshotDuplicado.empty) {
-            alert("⚠️ Atenção: Este QR Code/Link já foi registrado anteriormente por alguém do seu grupo!");
-            document.getElementById("statusEnvio").style.display = "none";
-            processandoBipe = false;
-            return; // Interrompe o salvamento
+            alert("⚠️ Atenção: Este link já foi registrado anteriormente pelo seu grupo!");
+            finalizarProcessamento();
+            return false; // AVISO: Não salvou!
         }
 
-        // --- SE NÃO FOR DUPLICADO, SALVA NORMALMENTE ---
+        // Salva se for novo
         const novoDoc = {
             link: linkLimpo,
             data: new Date().toLocaleString('pt-BR'),
@@ -177,11 +175,18 @@ async function onScanSuccess(texto) {
         listaEscaneamentos.unshift(novoDoc);
         atualizarTabela();
         
-    } catch (e) { 
-        console.error("Erro ao validar/salvar:", e);
-        alert("Erro técnico ao salvar. Tente novamente.");
-    }
+        finalizarProcessamento();
+        return true; // SUCESSO: Salvou!
 
+    } catch (e) { 
+        console.error(e);
+        finalizarProcessamento();
+        return false;
+    }
+}
+
+// Função auxiliar para limpar o status
+function finalizarProcessamento() {
     setTimeout(() => { 
         processandoBipe = false; 
         document.getElementById("statusEnvio").style.display = "none";
