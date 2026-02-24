@@ -142,19 +142,46 @@ async function iniciarScanner() {
 async function onScanSuccess(texto) {
     if (processandoBipe) return;
     processandoBipe = true;
+    
+    const linkLimpo = texto.trim();
     document.getElementById("statusEnvio").style.display = "block";
+
     try {
+        // --- TRAVA DE DUPLICIDADE ---
+        // Verifica se este link já existe no banco de dados para o seu grupo
+        const qDuplicado = query(
+            collection(db, "scans"), 
+            where("link", "==", linkLimpo),
+            where("grupo", "==", grupoAtual)
+        );
+        
+        const snapshotDuplicado = await getDocs(qDuplicado);
+
+        if (!snapshotDuplicado.empty) {
+            alert("⚠️ Atenção: Este QR Code/Link já foi registrado anteriormente por alguém do seu grupo!");
+            document.getElementById("statusEnvio").style.display = "none";
+            processandoBipe = false;
+            return; // Interrompe o salvamento
+        }
+
+        // --- SE NÃO FOR DUPLICADO, SALVA NORMALMENTE ---
         const novoDoc = {
-            link: texto.trim(),
+            link: linkLimpo,
             data: new Date().toLocaleString('pt-BR'),
             operador: operadorAtual,
             grupo: grupoAtual,
             timestamp: Date.now()
         };
+
         await addDoc(collection(db, "scans"), novoDoc);
         listaEscaneamentos.unshift(novoDoc);
         atualizarTabela();
-    } catch (e) { console.error(e); }
+        
+    } catch (e) { 
+        console.error("Erro ao validar/salvar:", e);
+        alert("Erro técnico ao salvar. Tente novamente.");
+    }
+
     setTimeout(() => { 
         processandoBipe = false; 
         document.getElementById("statusEnvio").style.display = "none";
