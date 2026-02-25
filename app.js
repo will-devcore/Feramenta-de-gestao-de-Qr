@@ -1,3 +1,11 @@
+/* * SCANNER QR MASTER - VERSÃO PRO 2.0
+ * -----------------------------------------------------------
+ * COPYRIGHT (C) 2026, WILLIAM VA PEREIRA. (github.com/will-devcore)
+ * TODOS OS DIREITOS RESERVADOS.
+ * -----------------------------------------------------------
+ * Este software é propriedade privada. A cópia, modificação ou 
+ * distribuição não autorizada deste código-fonte é proibida.
+ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
