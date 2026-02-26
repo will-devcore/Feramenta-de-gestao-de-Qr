@@ -22,6 +22,11 @@
     <meta name="theme-color" content="#2c3e50">
 </head>
 <body>
+    <div id="cameraGuias" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:1001;">
+        <div style="position:absolute; top:40%; left:50%; transform:translate(-50%, -50%); width:250px; height:250px; border:3px solid #2ecc71; border-radius:20px; box-shadow: 0 0 0 1000px rgba(0,0,0,0.4);"></div>
+        <p style="position:absolute; top:65%; width:100%; text-align:center; color:white; font-weight:bold; text-shadow: 1px 1px 2px #000;">ENQUADRE O QR CODE E A CHAVE ACIMA</p>
+    </div>
+
     <div id="telaLogin" class="container-login">
         <h2>Acesso ao Sistema QR</h2>
         <input type="email" id="emailLogin" placeholder="Seu e-mail">
@@ -41,11 +46,17 @@
             </div>
 
             <div id="painelAjustes" style="display:none; background: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; color: #333; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);">
-                <h3 style="margin-top: 0;">⚙️ Configurações</h3>
+                <h3 style="margin-top: 0;">⚙️ Configurações do Sistema</h3>
                 
                 <label><strong>Operador Ativo:</strong></label><br>
                 <input type="text" id="nomeOperadorTroca" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
 
+                <label><strong>Estado (UF) das Notas:</strong></label><br>
+                <input type="text" id="inputUF" placeholder="EX: MG" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+
+                <label><strong>URL de Consulta (Portal Fazenda):</strong></label><br>
+                <input type="text" id="inputURLSefaz" placeholder="Link base para reconstrução" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+                
                 <label><strong>Tempo de Inatividade:</strong></label><br>
                 <select id="setInatividade" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
                     <option value="60000">1 Minuto</option>
@@ -86,20 +97,20 @@
 
             <div style="padding: 15px; background: #fff; margin: 15px 10px; border-radius: 8px; border: 2px solid #3498db; text-align: center;">
                 <div style="margin-bottom: 20px;">
-                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">📸 Foto em alta resolução</label>
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">📸 Recuperação Híbrida (Foto)</label>
                     <label for="inputArquivo" style="background: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; display: block; text-align: center; border: 2px solid #219150;">
                         TIRAR FOTO DO QR CODE
                     </label>
                     <input type="file" id="inputArquivo" accept="image/*" capture="environment" style="display: none;" onchange="lerQrDeArquivo(event)">
-                    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Sistema Blindado: Resolve papéis amassados ou sujos.</p>
+                    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Resolve chaves mal impressas ou QR Codes corrompidos.</p>
                 </div>
 
                 <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
                 <div>
-                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">⌨️ Digitação Manual</label>
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">⌨️ Digitação/Edição Manual</label>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="urlManual" placeholder="Cole o link ou chave de 44 dígitos" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
+                        <input type="text" id="urlManual" placeholder="Chave de 44 dígitos" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
                         <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">SALVAR</button>
                     </div>
                 </div>
