@@ -6,6 +6,8 @@
     <title>Sistema QR Master - William Victor</title>
     
     <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="logo.png">
     <link rel="apple-touch-icon" href="logo.png">
@@ -41,7 +43,7 @@
             <div id="painelAjustes" style="display:none; background: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; color: #333; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);">
                 <h3 style="margin-top: 0;">⚙️ Configurações</h3>
                 
-                <label><strong>Operador Ativo (Nome para o Registro):</strong></label><br>
+                <label><strong>Operador Ativo:</strong></label><br>
                 <input type="text" id="nomeOperadorTroca" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
 
                 <label><strong>Tempo de Inatividade:</strong></label><br>
@@ -62,8 +64,8 @@
         </header>
 
         <main>
-            <div id="statusEnvio" style="display:none; background: #27ae60; color: white; text-align: center; padding: 10px; font-weight: bold;">
-                💾 Processando dados...
+            <div id="statusEnvio" style="display:none; background: #27ae60; color: white; text-align: center; padding: 12px; font-weight: bold; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+                🔍 Analisando...
             </div>
 
             <div style="margin-top: 15px; background: #333; color: white; padding: 10px; border-radius: 8px 8px 0 0; text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px;">
@@ -75,66 +77,54 @@
                 </select>
             </div>
 
-            <div id="container-leitor" style="width: 100%; max-width: 500px; margin: auto; background: #000; border-radius: 8px; overflow: hidden; position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
-    
+            <div id="container-leitor" style="width: 100%; max-width: 500px; margin: auto; background: #000; border-radius: 0 0 8px 8px; overflow: hidden; position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
                 <video id="reader" style="width: 100%; height: auto; display: none;"></video>
-
                 <button id="btnLigarCamera" onclick="ativarScannerAoVivo()" style="position: absolute; background: #e67e22; color: white; border: none; padding: 15px 25px; border-radius: 50px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 10;">
                     🚀 LIGAR SCANNER AO VIVO
                 </button>
             </div>
 
             <div style="padding: 15px; background: #fff; margin: 15px 10px; border-radius: 8px; border: 2px solid #3498db; text-align: center;">
-    
                 <div style="margin-bottom: 20px;">
-                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">
-                        📸 Opção A: Foto em alta resolução
-                    </label>
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">📸 Foto em alta resolução</label>
                     <label for="inputArquivo" style="background: #27ae60; color: white; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; display: block; text-align: center; border: 2px solid #219150;">
                         TIRAR FOTO DO QR CODE
                     </label>
                     <input type="file" id="inputArquivo" accept="image/*" capture="environment" style="display: none;" onchange="lerQrDeArquivo(event)">
-                    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Ideal para papéis amassados ou com pouco brilho.</p>
+                    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Sistema Blindado: Resolve papéis amassados ou sujos.</p>
                 </div>
 
                 <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
                 <div>
-                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">
-                        ⌨️ Opção B: Digitação Manual
-                    </label>
+                    <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">⌨️ Digitação Manual</label>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="urlManual" placeholder="Cole o link ou digite aqui" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
-                        <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">
-                            ENVIAR
-                        </button>
+                        <input type="text" id="urlManual" placeholder="Cole o link ou chave de 44 dígitos" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
+                        <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">SALVAR</button>
                     </div>
                 </div>
             </div>
             
             <section style="margin: 10px; padding: 15px; background: #eee; border-radius: 8px; color: #333;">
-                <h4 style="margin-top: 0;">📊 Relatório e Filtros</h4>
+                <h4 style="margin-top: 0;">📊 Relatórios</h4>
                 
                 <label style="font-size: 0.75rem;">Grupo:</label>
                 <select id="filtroGrupo" disabled style="width:100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #ccc;"></select>
 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <div style="flex: 1;">
-                        <label style="font-size: 0.75rem;">Data Início:</label>
+                        <label style="font-size: 0.75rem;">Início:</label>
                         <input type="date" id="filtroDataInicio" style="width: 100%; padding: 8px;">
                     </div>
                     <div style="flex: 1;">
-                        <label style="font-size: 0.75rem;">Data Fim:</label>
+                        <label style="font-size: 0.75rem;">Fim:</label>
                         <input type="date" id="filtroDataFim" style="width: 100%; padding: 8px;">
                     </div>
                 </div>
 
-                <label style="font-size: 0.75rem;">Operador:</label>
-                <label>Operador:</label>
-                <input type="text" id="filtroOperador" list="listaOperadoresSugestao" placeholder="Digite ou selecione">
-
-                <datalist id="listaOperadoresSugestao">
-                </datalist>
+                <label style="font-size: 0.75rem;">Filtrar Operador:</label>
+                <input type="text" id="filtroOperador" list="listaOperadoresSugestao" placeholder="Nome do operador" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #ccc;">
+                <datalist id="listaOperadoresSugestao"></datalist>
 
                 <div style="display: flex; gap: 10px;">
                     <button onclick="gerarRelatorio()" class="btn-primario" style="flex: 2; padding: 10px;">🔍 Buscar</button>
@@ -143,16 +133,16 @@
             </section>
 
             <section style="padding: 10px;">
-                <h3 style="margin-bottom: 10px;">Histórico de Leituras</h3>
-                <div class="tabela-container" style="overflow-x: auto; background: white; border-radius: 5px;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                <h3 style="margin-bottom: 10px;">Histórico Recente</h3>
+                <div class="tabela-container" style="overflow-x: auto; background: white; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 600px;">
                         <thead>
-                            <tr style="background: #eee; color: #333;">
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Status</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">QR Code</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Data/Hora</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Operador (Grupo)</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Ação</th>
+                            <tr style="background: #2c3e50; color: white;">
+                                <th style="padding: 12px; text-align: center;">Status</th>
+                                <th style="padding: 12px; text-align: left;">Chave/Link</th>
+                                <th style="padding: 12px; text-align: left;">Data</th>
+                                <th style="padding: 12px; text-align: left;">Operador (Grupo)</th>
+                                <th style="padding: 12px; text-align: center;">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="corpoTabela"></tbody>
