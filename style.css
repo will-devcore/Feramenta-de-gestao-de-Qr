@@ -157,3 +157,14 @@ body.dark-mode hr { border-top: 1px solid #333; }
 body.dark-mode label[for="inputArquivo"] {
     background: #1e8449; /* Verde mais fechado */
 }
+
+/* Garante que as opções dentro do menu fiquem visíveis no celular */
+body.dark-mode select option {
+    background-color: #2c2c2c !important;
+    color: white !important;
+}
+
+/* Melhora a visibilidade dos campos de data (Início/Fim) */
+body.dark-mode input[type="date"] {
+    color-scheme: dark; /* Faz o calendário do Android ficar escuro também */
+}
