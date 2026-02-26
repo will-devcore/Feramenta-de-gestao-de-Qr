@@ -80,63 +80,68 @@ async function processarEntrada(origem) {
     processandoAcao = true;
     atualizarStatusUI("🔍 Analisando...");
 
-    let chaveEncontrada = null;
+    let numerosExtraidos = "";
 
-    // Caso 1: Entrada Manual ou Texto (Extração de Chave)
+    // --- PASSO 1: EXTRAÇÃO ---
     if (typeof origem === "string") {
-        const m = origem.match(/\d{44}/);
-        if (m && validarChaveNF(m[0])) chaveEncontrada = m[0];
-        else {
-            const m43 = origem.match(/\d{43}/);
-            if (m43) chaveEncontrada = recuperarChaveIncompleta(m43[0]);
-        }
-    } 
-    // Caso 2: Scanner ou Foto
-    else {
+        numerosExtraidos = origem.replace(/\D/g, ''); 
+    } else {
         try {
-            // Tentativa 1: Leitura Limpa
             const res = await codeReader.decodeFromImageElement(origem);
-            const m = res.text.match(/\d{44}/);
-            if (m) chaveEncontrada = m[0];
+            numerosExtraidos = res.text.replace(/\D/g, '');
         } catch (e) {
-            atualizarStatusUI("⚡ Aplicando Blindagem...");
+            atualizarStatusUI("🤖 Recuperando via OCR...");
             const canvas = document.createElement('canvas');
-            canvas.width = origem.width; canvas.height = origem.height;
-            canvas.getContext('2d').drawImage(origem, 0, 0);
-            const imgBlindada = aplicarFiltroBlindagem(canvas);
+            canvas.width = origem.width; 
+            canvas.height = origem.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(origem, 0, 0);
             
-            try {
-                // Tentativa 2: QR Code na imagem binarizada
-                const resB = await codeReader.decodeFromImageUrl(imgBlindada);
-                const mB = resB.text.match(/\d{44}/);
-                if (mB) chaveEncontrada = mB[0];
-            } catch (e2) {
-                atualizarStatusUI("🤖 Tentando OCR de Emergência...");
-                try {
-                    const { data: { text } } = await Tesseract.recognize(imgBlindada, 'por');
-                    const numerosLidos = text.replace(/\D/g, '');
-                    const mC = numerosLidos.match(/\d{44}/);
-                    if (mC && validarChaveNF(mC[0])) chaveEncontrada = mC[0];
-                    else {
-                        // Se falhou tudo, joga o lixo que leu pro manual pra ele editar
-                        document.getElementById("urlManual").value = numerosLidos.substring(0,44);
-                    }
-                } catch(e3) { console.error("Falha OCR:", e3); }
-            }
+            const imgBlindada = aplicarFiltroBlindagem(canvas);
+            const { data: { text } } = await Tesseract.recognize(imgBlindada, 'por');
+            numerosExtraidos = text.replace(/\D/g, ''); 
         }
     }
 
-    if (chaveEncontrada) {
-        // RECONSTRUÇÃO: Ignora o link original e usa a URL base configurada
-        const linkFinal = configApp.urlSefaz + chaveEncontrada;
-        await salvarRegistro(linkFinal);
+    // --- PASSO 2: FILTRAGEM (Pega o bloco de 44 dígitos) ---
+    const match = numerosExtraidos.match(/\d{44}/);
+    const chaveCandidata = match ? match[0] : numerosExtraidos.substring(0, 44);
+
+    // --- PASSO 3: VALIDAÇÃO E RECONSTRUÇÃO ---
+    if (chaveCandidata.length === 44 && validarChaveNF(chaveCandidata)) {
+        
+        const confirmada = confirm(`Chave Detectada:\n${formatarChaveParaExibicao(chaveCandidata)}\n\nDeseja salvar?`);
+        
+        if (confirmada) {
+            // RECONSTRUÇÃO: Monta o link oficial usando a base configurada
+            const linkFinal = configApp.urlSefaz + chaveCandidata;
+            await salvarRegistro(linkFinal);
+            document.getElementById("urlManual").value = ""; 
+        } else {
+            preencherCampoManual(chaveCandidata);
+        }
     } else {
-        alert("❌ Nota ilegível. Verifique o foco ou complete a chave no campo manual.");
-        document.getElementById("urlManual").focus();
+        // Se a nota for ilegível ou a chave estiver errada
+        alert("❌ Nota ilegível ou chave inválida. Verifique o foco ou complete no campo manual.");
+        preencherCampoManual(chaveCandidata);
     }
 
     processandoAcao = false;
     atualizarStatusUI(null);
+}
+
+// --- FUNÇÕES DE APOIO (Mantenha-as logo abaixo da processarEntrada) ---
+function preencherCampoManual(valor) {
+    const campo = document.getElementById("urlManual");
+    if (campo) {
+        campo.value = formatarChaveParaExibicao(valor);
+        campo.focus();
+    }
+}
+
+function formatarChaveParaExibicao(valor) {
+    // Adiciona os espaços para ficar igual à nota fiscal: 0000 0000...
+    return valor.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim();
 }
 
 // --- 4. PERSISTÊNCIA E VALIDAÇÃO DE DUPLICIDADE ---
@@ -307,4 +312,25 @@ function resetarTimer() {
         if (b) { b.style.display = "block"; b.innerText = "🚀 CÂMERA EM REPOUSO (TOQUE P/ VOLTAR)"; }
     }, 180000); // 3 minutos
 }
+
 document.addEventListener("click", resetarTimer);
+// Garante que os botões de busca e exportação funcionem
+window.gerarRelatorio = carregarHistorico; 
+
+window.exportarParaCSV = () => {
+    if (listaEscaneamentos.length === 0) return alert("Não há dados para exportar.");
+    
+    let csv = "\uFEFF"; // BOM para o Excel entender acentos
+    csv += "Status;Chave;Data;Operador;Grupo\n";
+    
+    listaEscaneamentos.forEach(item => {
+        csv += `OK;${item.link};${item.data};${item.operador};${item.grupo}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `relatorio_scans_${grupoAtual}.csv`);
+    a.click();
+};

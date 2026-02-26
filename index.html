@@ -110,7 +110,10 @@
                 <div>
                     <label style="color: #333; font-weight: bold; display: block; margin-bottom: 8px;">⌨️ Digitação/Edição Manual</label>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="urlManual" placeholder="Chave de 44 dígitos" style="flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
+                        <input type="text" id="urlManual" placeholder="0000 0000 0000 0000..." 
+                        oninput="this.value = this.value.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ')" 
+                        maxlength="55" 
+                        style="flex: 1; padding: 12px; font-family: monospace;">
                         <button onclick="enviarManual()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">SALVAR</button>
                     </div>
                 </div>
