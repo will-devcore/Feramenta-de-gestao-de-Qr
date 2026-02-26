@@ -47,27 +47,33 @@
 
             <div id="painelAjustes" style="display:none; background: #f4f4f4; padding: 20px; border-bottom: 2px solid #ddd; color: #333; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);">
                 <h3 style="margin-top: 0;">⚙️ Configurações do Sistema</h3>
-                
                 <label><strong>Operador Ativo:</strong></label><br>
-                <input type="text" id="nomeOperadorTroca" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+                <select id="nomeOperadorTroca" style="width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; background-color: white; font-weight: bold;">
+                    <option value="">🔍 Carregando operadores...</option>
+                </select>
 
-                <label><strong>Estado (UF) das Notas:</strong></label><br>
-                <input type="text" id="inputUF" placeholder="EX: MG" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+                <label><strong>Portal de Consulta (Seleção de Estado):</strong></label><br>
+                <select id="inputURLSefaz" style="width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; background-color: white;">
+                    <option value="https://portalsped.fazenda.mg.gov.br/portalsped/sistema/consultaunificada.xhtml?chaveAcesso=">Minas Gerais (MG) - Padrão</option>
+                    <option value="https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?chNFe=">Rio Grande do Sul (RS)</option>
+                    <option value="https://www.sefaz.sp.gov.br/consultafe/consulta?chaveAcesso=">São Paulo (SP)</option>
+                </select>
 
-                <label><strong>URL de Consulta (Portal Fazenda):</strong></label><br>
-                <input type="text" id="inputURLSefaz" placeholder="Link base para reconstrução" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
-                
-                <label><strong>Tempo de Inatividade:</strong></label><br>
-                <select id="setInatividade" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc;">
+                <label><strong>Tempo para Repouso da Câmera:</strong></label><br>
+                <select id="setInatividade" style="width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; background-color: white;">
                     <option value="60000">1 Minuto</option>
                     <option value="180000" selected>3 Minutos</option>
                     <option value="300000">5 Minutos</option>
-                    <option value="0">Nunca desligar</option>
+                    <option value="600000">10 Minutos</option>
+                    <option value="0">Manter sempre ligada</option>
                 </select>
 
                 <button onclick="toggleDarkMode()" class="btn-filtro" style="width: 100%; margin-bottom: 15px; padding: 12px;">🌙 Alternar Modo Escuro</button>
-                <button onclick="salvarPreferencias()" class="btn-primario" style="width: 100%; padding: 12px; margin-bottom: 15px;">💾 Salvar e Aplicar</button>
-                
+
+                <button onclick="window.salvarPreferencias()" style="width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px;">
+                    💾 SALVAR E APLICAR AJUSTES
+                </button>
+
                 <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
                 
                 <button onclick="fazerLogout()" class="btn-sair" style="width: 100%; padding: 12px; background: #c0392b; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">🚪 SAIR DO APLICATIVO</button>
