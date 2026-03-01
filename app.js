@@ -317,3 +317,21 @@ document.addEventListener("click", resetarTimer);
 document.getElementById("urlManual").oninput = function() {
     this.value = this.value.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').substring(0, 55);
 };
+window.testarNotaAntesDeSalvar = () => {
+    let chaveTeste = "";
+    // Pega o que está digitado nos 11 blocos agora
+    for (let i = 0; i < 11; i++) {
+        chaveTeste += document.getElementById(`bloco${i}`).value;
+    }
+
+    if (chaveTeste.length < 44) {
+        alert("⚠️ A chave ainda está incompleta para testar!");
+        return;
+    }
+
+    // Monta o link com a URL que está configurada (MG, RS, etc)
+    const linkTeste = urlConfigurada + chaveTeste;
+    
+    // Abre em uma nova aba para o operador conferir
+    window.open(linkTeste, '_blank');
+};
