@@ -171,6 +171,20 @@
             </section>
         </main>
     </div>
+    <div id="modalConferencia" class="modal-conferencia">
+        <div class="modal-conteudo">
+            <h3>🔍 Conferir Chave Escaneada</h3>
+            <p style="font-size: 12px; color: #666;">Corrija os blocos se necessário:</p>
+            
+            <div id="gridChave" class="grid-chave">
+                </div>
+
+            <div style="margin-top: 20px;">
+                <button onclick="confirmarEnvioFinal()" style="padding: 15px; background: #28a745; color: white; border: none; border-radius: 5px; width: 45%;">✅ SALVAR</button>
+                <button onclick="fecharModal()" style="padding: 15px; background: #dc3545; color: white; border: none; border-radius: 5px; width: 45%;">❌ CANCELAR</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>

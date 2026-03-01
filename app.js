@@ -151,42 +151,54 @@ function validarChaveNF(chave) {
     return dv === parseInt(limpa[43]);
 }
 
+let chaveTemporaria = "";
+
 async function processarEntrada(texto) {
     if (processandoAcao) return;
     processandoAcao = true;
 
-    // 1. Procura por uma sequência de 44 números em qualquer lugar do texto/link
-    const regexChave = /\d{44}/;
-    const buscaChave = texto.match(regexChave);
+    // Pegamos apenas os primeiros 44 números que o scanner achar, ignorando o resto
+    const apenasNumeros = texto.replace(/\D/g, '').substring(0, 44);
     
-    let chaveFinal = null;
-
-    if (buscaChave) {
-        // Se achou os 44 números grudados (mesmo dentro de um link de 70 letras)
-        chaveFinal = buscaChave[0];
-    } else {
-        // 2. Se não achou 44, tenta limpar tudo que não é número e ver se sobra 44 ou 43
-        const limpo = texto.replace(/\D/g, '');
-        if (limpo.length === 44 && validarChaveNF(limpo)) {
-            chaveFinal = limpo;
-        } else if (limpo.length === 43) {
-            // Tenta recuperar o dígito verificador se a nota estiver amassada
-            for (let i = 0; i <= 9; i++) {
-                if (validarChaveNF(limpo + i)) { chaveFinal = limpo + i; break; }
-            }
-        }
-    }
-
-    if (chaveFinal) {
-        const link = urlConfigurada + chaveFinal;
-        await salvarNoFirebase(link);
-    } else {
-        // 3. Melhoria no alerta para você saber o que ele realmente leu
-        const apenasNumeros = texto.replace(/\D/g, '');
-        alert(`❌ Chave inválida!\nO sistema extraiu ${apenasNumeros.length} números.\nPara ser NF-e, precisa de 44.`);
-    }
+    abrirModalConferencia(apenasNumeros);
     processandoAcao = false;
 }
+
+function abrirModalConferencia(numeros) {
+    const modal = document.getElementById("modalConferencia");
+    const grid = document.getElementById("gridChave");
+    grid.innerHTML = "";
+
+    // Criamos 11 campos de 4 dígitos cada
+    for (let i = 0; i < 11; i++) {
+        let trecho = numeros.substring(i * 4, (i * 4) + 4);
+        grid.innerHTML += `<input type="number" class="input-chave-bloco" id="bloco${i}" value="${trecho}" oninput="this.value=this.value.slice(0,4)">`;
+    }
+
+    modal.style.display = "block";
+    codeReader.reset(); // Para a câmera para não ler de novo enquanto confere
+}
+
+window.confirmarEnvioFinal = async () => {
+    let chaveMontada = "";
+    for (let i = 0; i < 11; i++) {
+        chaveMontada += document.getElementById(`bloco${i}`).value;
+    }
+
+    if (chaveMontada.length !== 44) {
+        alert("A chave precisa ter exatamente 44 dígitos. Confira os blocos!");
+        return;
+    }
+
+    const link = urlConfigurada + chaveMontada;
+    await salvarNoFirebase(link);
+    fecharModal();
+};
+
+window.fecharModal = () => {
+    document.getElementById("modalConferencia").style.display = "none";
+    document.getElementById("btnLigarCamera").style.display = "block"; // Permite ligar a câmera de novo
+};
 
 async function salvarNoFirebase(link) {
     try {

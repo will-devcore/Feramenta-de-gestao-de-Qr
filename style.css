@@ -168,3 +168,40 @@ body.dark-mode select option {
 body.dark-mode input[type="date"] {
     color-scheme: dark; /* Faz o calendário do Android ficar escuro também */
 }
+/* Estilo do Modal de Conferência */
+.modal-conferencia {
+    display: none; 
+    position: fixed; 
+    z-index: 9999; 
+    left: 0; top: 0; width: 100%; height: 100%; 
+    background-color: rgba(0,0,0,0.9);
+}
+
+.modal-conteudo {
+    background-color: #f0f0f0;
+    margin: 10% auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.grid-chave {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin: 15px 0;
+}
+
+.input-chave-bloco {
+    width: 100%;
+    padding: 8px;
+    text-align: center;
+    font-size: 18px;
+    font-family: monospace;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+body.dark-mode .modal-conteudo { background-color: #1e1e1e; color: white; }
