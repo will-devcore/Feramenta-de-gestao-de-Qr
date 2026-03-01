@@ -153,41 +153,77 @@ function validarChaveNF(chave) {
 
 let chaveTemporaria = "";
 
+// --- FUNÇÃO MAESTRO: PROCESSAR ENTRADA ---
 async function processarEntrada(texto) {
     if (processandoAcao) return;
     processandoAcao = true;
 
-    // Pegamos apenas os primeiros 44 números que o scanner achar, ignorando o resto
-    const apenasNumeros = texto.replace(/\D/g, '').substring(0, 44);
-    
-    abrirModalConferencia(apenasNumeros);
+    console.log("Conteúdo bruto lido:", texto);
+
+    // 1. EXTRAÇÃO: Remove tudo que não é número
+    // Isso limpa links da SEFAZ, protocolos e textos extras
+    const apenasNumeros = texto.replace(/\D/g, '');
+
+    // 2. FILTRAGEM: Pegamos apenas os primeiros 44 dígitos
+    // (Se o scanner ler 70, ele ignora os 26 finais que costumam ser lixo)
+    const chaveSugestao = apenasNumeros.substring(0, 44);
+
+    if (chaveSugestao.length > 0) {
+        // 3.DIRECIONAMENTO: Abre o modal para o operador conferir e editar
+        abrirModalConferencia(chaveSugestao);
+    } else {
+        alert("❌ Não foi possível identificar números no QR Code. Tente focar melhor ou use a Recuperação Híbrida.");
+    }
+
     processandoAcao = false;
 }
 
+// --- FUNÇÃO DE APOIO: MONTAGEM DO GRID DE CONFERÊNCIA ---
 function abrirModalConferencia(numeros) {
     const modal = document.getElementById("modalConferencia");
     const grid = document.getElementById("gridChave");
+    
+    // Limpa o grid antes de gerar
     grid.innerHTML = "";
 
-    // Criamos 11 campos de 4 dígitos cada
+    // Gera os 11 blocos de 4 dígitos
     for (let i = 0; i < 11; i++) {
         let trecho = numeros.substring(i * 4, (i * 4) + 4);
-        grid.innerHTML += `<input type="number" class="input-chave-bloco" id="bloco${i}" value="${trecho}" oninput="this.value=this.value.slice(0,4)">`;
+        
+        // Criamos o input com o "pulo automático" (focus) para o próximo campo
+        grid.innerHTML += `
+            <input type="number" 
+                   class="input-chave-bloco" 
+                   id="bloco${i}" 
+                   value="${trecho}" 
+                   placeholder="0000"
+                   oninput="if(this.value.length >= 4 && ${i} < 10) document.getElementById('bloco${i+1}').focus()"
+            >`;
     }
 
+    // Exibe o modal na tela
     modal.style.display = "block";
-    codeReader.reset(); // Para a câmera para não ler de novo enquanto confere
+
+    // Para o scanner para não ficar tentando ler enquanto o usuário edita
+    if (window.codeReader) {
+        window.codeReader.reset();
+        document.getElementById("reader").style.display = "none";
+        document.getElementById("btnLigarCamera").style.display = "block";
+    }
 }
+
 
 window.confirmarEnvioFinal = async () => {
     let chaveMontada = "";
     for (let i = 0; i < 11; i++) {
+        // Pega o valor de cada uma das 11 caixinhas
         chaveMontada += document.getElementById(`bloco${i}`).value;
     }
 
-    if (chaveMontada.length !== 44) {
-        alert("A chave precisa ter exatamente 44 dígitos. Confira os blocos!");
-        return;
+    // AQUI A FUNÇÃO É CHAMADA (Ela deixará de ser transparente no editor)
+    if (!validarChaveNF(chaveMontada)) {
+        alert("⚠️ ATENÇÃO: Os números digitados não formam uma chave válida (Dígito Verificador incorreto). Por favor, confira a nota!");
+        return; // Impede o salvamento de dados errados
     }
 
     const link = urlConfigurada + chaveMontada;
@@ -316,22 +352,4 @@ document.addEventListener("click", resetarTimer);
 // Máscara Visual para o campo manual
 document.getElementById("urlManual").oninput = function() {
     this.value = this.value.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').substring(0, 55);
-};
-window.testarNotaAntesDeSalvar = () => {
-    let chaveTeste = "";
-    // Pega o que está digitado nos 11 blocos agora
-    for (let i = 0; i < 11; i++) {
-        chaveTeste += document.getElementById(`bloco${i}`).value;
-    }
-
-    if (chaveTeste.length < 44) {
-        alert("⚠️ A chave ainda está incompleta para testar!");
-        return;
-    }
-
-    // Monta o link com a URL que está configurada (MG, RS, etc)
-    const linkTeste = urlConfigurada + chaveTeste;
-    
-    // Abre em uma nova aba para o operador conferir
-    window.open(linkTeste, '_blank');
 };
