@@ -155,14 +155,25 @@ async function processarEntrada(texto) {
     if (processandoAcao) return;
     processandoAcao = true;
 
-    const limpo = texto.replace(/\D/g, '');
+    // 1. Procura por uma sequência de 44 números em qualquer lugar do texto/link
+    const regexChave = /\d{44}/;
+    const buscaChave = texto.match(regexChave);
+    
     let chaveFinal = null;
 
-    // Lógica de Recuperação de Chave Completa (44 ou 43 dígitos)
-    if (limpo.length === 44 && validarChaveNF(limpo)) chaveFinal = limpo;
-    else if (limpo.length === 43) {
-        for (let i = 0; i <= 9; i++) {
-            if (validarChaveNF(limpo + i)) { chaveFinal = limpo + i; break; }
+    if (buscaChave) {
+        // Se achou os 44 números grudados (mesmo dentro de um link de 70 letras)
+        chaveFinal = buscaChave[0];
+    } else {
+        // 2. Se não achou 44, tenta limpar tudo que não é número e ver se sobra 44 ou 43
+        const limpo = texto.replace(/\D/g, '');
+        if (limpo.length === 44 && validarChaveNF(limpo)) {
+            chaveFinal = limpo;
+        } else if (limpo.length === 43) {
+            // Tenta recuperar o dígito verificador se a nota estiver amassada
+            for (let i = 0; i <= 9; i++) {
+                if (validarChaveNF(limpo + i)) { chaveFinal = limpo + i; break; }
+            }
         }
     }
 
@@ -170,7 +181,9 @@ async function processarEntrada(texto) {
         const link = urlConfigurada + chaveFinal;
         await salvarNoFirebase(link);
     } else {
-        alert("❌ Chave inválida! O sistema detectou apenas: " + limpo.length + " dígitos.");
+        // 3. Melhoria no alerta para você saber o que ele realmente leu
+        const apenasNumeros = texto.replace(/\D/g, '');
+        alert(`❌ Chave inválida!\nO sistema extraiu ${apenasNumeros.length} números.\nPara ser NF-e, precisa de 44.`);
     }
     processandoAcao = false;
 }
