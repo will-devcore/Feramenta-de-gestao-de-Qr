@@ -53,6 +53,41 @@ window.toggleDarkMode = () => {
 
 // --- 2. GESTÃO DE PREFERÊNCIAS E SELEÇÃO RÁPIDA ---
 
+// --- NOVO: FILTRO DE NITIDEZ E BINARIZAÇÃO ---
+function processarImagemParaLeitura(videoElement) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Define o tamanho do canvas igual ao vídeo para não perder resolução
+    canvas.width = videoElement.videoWidth;
+    canvas.height = videoElement.videoHeight;
+    
+    // Desenha o frame atual do vídeo no canvas
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    
+    // Captura os pixels para manipulação
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Algoritmo de Binarização por Contraste (Filtro de Nitidez)
+    for (let i = 0; i < data.length; i += 4) {
+        // Converte para escala de cinza (Luminosidade)
+        const avg = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+        
+        // Aplica o Threshold (Binarização): 
+        // Se for mais escuro que 128 (meio), vira PRETO (0), senão BRANCO (255)
+        // Isso remove sombras de papel amassado e reflexos de luz
+        const valor = avg < 128 ? 0 : 255;
+        
+        data[i]     = valor; // R
+        data[i + 1] = valor; // G
+        data[i + 2] = valor; // B
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas; // Retorna a imagem "limpa" para o decodificador
+}
+
 async function carregarListaOperadores() {
     const select = document.getElementById("nomeOperadorTroca");
     if (!select) return;
@@ -210,6 +245,17 @@ function abrirModalConferencia(numeros) {
         document.getElementById("reader").style.display = "none";
         document.getElementById("btnLigarCamera").style.display = "block";
     }
+    document.addEventListener('keydown', function(event) {
+    if (event.key === 'Backspace' && event.target.classList.contains('input-chave-bloco')) {
+        const input = event.target;
+        if (input.value.length === 0) {
+            const idAtual = parseInt(input.id.replace('bloco', ''));
+            if (idAtual > 0) {
+                document.getElementById(`bloco${idAtual - 1}`).focus();
+            }
+        }
+    }
+});
 }
 
 
@@ -264,13 +310,43 @@ async function salvarNoFirebase(link) {
 window.ativarScannerAoVivo = async () => {
     const video = document.getElementById("reader");
     video.style.display = "block";
+    document.getElementById("btnLigarCamera").style.display = "none";
+
     try {
         const devices = await codeReader.listVideoInputDevices();
-        codeReader.decodeFromVideoDevice(devices[devices.length - 1].deviceId, 'reader', (res) => {
-            if (res && !processandoAcao) processarEntrada(res.text);
+        const selectedDevice = devices[devices.length - 1].deviceId;
+
+        // Inicia o stream da câmera sem o ZXing ler direto
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { deviceId: selectedDevice, focusMode: 'continuous' } 
         });
-        document.getElementById("btnLigarCamera").style.display = "none";
-    } catch (e) { alert("Câmera indisponível."); }
+        video.srcObject = stream;
+        video.play();
+
+        // Loop de processamento manual
+        const scanLoop = async () => {
+            if (processandoAcao || video.paused || video.ended) return;
+
+            // 1. Processa o frame com o nosso filtro de binarização
+            const canvasLimpo = processarImagemParaLeitura(video);
+
+            try {
+                // 2. Tenta decodificar a partir da imagem binarizada (Muito mais nítido!)
+                const res = await codeReader.decodeFromCanvas(canvasLimpo);
+                if (res) processarEntrada(res.text);
+            } catch (err) {
+                // Se não ler, continua tentando no próximo frame (FPS definido no seu select)
+                const fps = parseInt(document.getElementById("setFPS").value) || 25;
+                setTimeout(() => requestAnimationFrame(scanLoop), 1000 / fps);
+            }
+        };
+
+        requestAnimationFrame(scanLoop);
+
+    } catch (e) {
+        alert("Erro ao acessar câmera: " + e.message);
+        document.getElementById("btnLigarCamera").style.display = "block";
+    }
 };
 
 window.lerQrDeArquivo = (e) => {
